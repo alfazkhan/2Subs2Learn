@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "2Subs2Learn - Dual Subtitles",
+  "version": "1.0.0",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "webRequest",
+    "webNavigation"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "http://localhost:3000/*"
+  ]
+}
