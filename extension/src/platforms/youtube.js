@@ -60,7 +60,6 @@ export async function loadTranslationChunk(startIndex) {
 export function parseSubtitlePayload(payload, requestUrl) {
     if (!payload || !payload.events) return;
 
-    // 1. Check if video changed to clear cache
     const urlParams = new URLSearchParams(window.location.search);
     const currentVideoId = urlParams.get('v');
     if (currentVideoId && currentVideoId !== lastVideoId) {
@@ -69,7 +68,6 @@ export function parseSubtitlePayload(payload, requestUrl) {
         logEvent("Platform Adapter", `New video detected (${currentVideoId}), cache wiped.`);
     }
 
-    // 2. Auto-detect source language from timedtext URL parameters
     if (requestUrl) {
         if (requestUrl.includes('lang=de')) {
             AppConfig.sourceLanguage = 'de';
@@ -123,13 +121,15 @@ export function initPlatformSyncEngine() {
 
     enablePlatformCaptions();
     let previousCueText = "";
+    let isWaitingForTranslation = false;
 
     videoElement.addEventListener('seeked', () => {
+        isWaitingForTranslation = false;
         alignBatchToTime(videoElement.currentTime);
     });
 
     function updateTimeline() {
-        if (subtitleCues.length > 0 && !videoElement.paused) {
+        if (subtitleCues.length > 0) {
             const currentTime = videoElement.currentTime;
             
             const activeIndex = subtitleCues.findIndex(
@@ -142,19 +142,24 @@ export function initPlatformSyncEngine() {
                 const batchIndex = Math.floor(activeIndex / AppConfig.batchSize) * AppConfig.batchSize;
 
                 if (!hasTranslation(sourceText)) {
-                    if (!videoElement.paused) {
+                    if (!videoElement.paused && !isWaitingForTranslation) {
+                        isWaitingForTranslation = true;
                         videoElement.pause();
                         renderDualSubtitles("Translating batch...", sourceText);
+                        logEvent("Sync Engine", "Paused video: waiting for translation batch.");
                     }
 
                     if (activeBatchIndex !== batchIndex) {
-                        loadTranslationChunk(batchIndex).then(() => {
-                            if (hasTranslation(sourceText) && videoElement.paused) {
-                                videoElement.play();
-                            }
-                        });
+                        loadTranslationChunk(batchIndex);
                     }
                 } else {
+                    if (isWaitingForTranslation) {
+                        isWaitingForTranslation = false;
+                        renderDualSubtitles(getCachedTranslation(sourceText), sourceText);
+                        videoElement.play();
+                        logEvent("Sync Engine", "Translation ready. Resuming playback.");
+                    }
+
                     if (sourceText !== previousCueText) {
                         previousCueText = sourceText;
                         const targetText = getCachedTranslation(sourceText);
