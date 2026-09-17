@@ -1,29 +1,49 @@
 #dual-subs-box {
-    width: 100%;
-    min-height: 85px; /* Keeps the box height locked even when empty */
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background-color: #1f1f1f;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 10px 16px;
-    margin-bottom: 12px;
-    box-sizing: border-box;
-    text-align: center;
-    font-family: Roboto, Arial, sans-serif;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    position: absolute !important;
+    bottom: 55px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 80% !important;
+    max-width: 850px !important;
+    min-height: 60px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    background-color: rgba(8, 8, 8, 0.85) !important;
+    border-radius: 6px !important;
+    padding: 10px 20px !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
+    font-family: Roboto, Arial, sans-serif !important;
+    z-index: 2147483647 !important;
+    pointer-events: none !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7) !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s ease-in-out !important;
 }
 
-.sub-line-german {
-    font-size: 18px;
-    color: #ffd700;
-    font-weight: 500;
-    margin-bottom: 4px;
+#dual-subs-box.visible {
+    opacity: 1 !important;
 }
 
-.sub-line-english {
-    font-size: 15px;
-    color: #aaaaaa;
+/* Primary Line (Yellow and prominent) */
+.sub-line-primary {
+    font-size: 20px !important;
+    color: #ffd700 !important;
+    font-weight: 500 !important;
+    margin-bottom: 4px !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.9) !important;
+}
+
+/* Secondary Line (White and small) */
+.sub-line-secondary {
+    font-size: 14px !important;
+    color: #ffffff !important;
+    font-weight: 400 !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.9) !important;
+}
+
+.ytp-caption-window-container {
+    display: none !important;
 }

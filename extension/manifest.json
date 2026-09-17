@@ -1,23 +1,27 @@
 {
   "manifest_version": 3,
-  "name": "2Subs2Learn - Dual Subtitles",
+  "name": "2Subs2Learn",
   "version": "1.0.0",
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
   "permissions": [
     "activeTab",
     "scripting",
     "webRequest",
-    "webNavigation"
+    "webNavigation",
+    "storage"
   ],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
+      "js": ["ExtensionLoadFile.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "host_permissions": [
     "https://www.youtube.com/*",

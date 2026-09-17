@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>2Subs2Learn Dashboard</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h2>2Subs2Learn Settings</h2>
+            <button id="pin-btn" title="Pin / Open in separate tab">📌 Pin</button>
+        </div>
+        
+        <div class="settings-group">
+            <h3>Translation Pair</h3>
+            <div class="settings-row translation-swap-row">
+                <select id="source-lang">
+                    <option value="en">English</option>
+                    <option value="de">German</option>
+                </select>
+                <button id="swap-btn" title="Swap languages">⇄</button>
+                <select id="target-lang">
+                    <option value="de" selected>German</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <h3>On-Screen Display Mode (Primary)</h3>
+            <div class="button-group">
+                <button class="display-btn active" data-value="target">Target (Large)</button>
+                <button class="display-btn" data-value="source">Source (Large)</button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <h3>Performance Tuning</h3>
+            <div class="settings-row">
+                <label>Batch Size:</label>
+                <input type="number" id="batch-size" value="10" min="1" max="50">
+            </div>
+            <div class="settings-row">
+                <label>Prefetch Offset:</label>
+                <input type="number" id="prefetch-offset" value="3" min="1" max="10">
+            </div>
+        </div>
+
+        <div id="log-container"></div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>
