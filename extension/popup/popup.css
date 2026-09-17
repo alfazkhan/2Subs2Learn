@@ -13,14 +13,14 @@ body {
     align-items: center;
     border-bottom: 1px solid #333;
     padding-bottom: 6px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .settings-group {
     background: #161616;
     border: 1px solid #282828;
     border-radius: 6px;
-    padding: 8px;
+    padding: 8px 10px;
     margin-bottom: 8px;
 }
 
@@ -36,11 +36,22 @@ body {
     justify-content: space-between;
     align-items: center;
     font-size: 12px;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
-.translation-swap-row {
-    justify-content: space-around;
+.swap-container {
+    justify-content: center;
+    margin-top: 4px;
+}
+
+#swap-btn {
+    background: #282828;
+    color: #EE964B;
+    border: 1px solid #444;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
 }
 
 select, input[type="number"] {
@@ -50,26 +61,12 @@ select, input[type="number"] {
     padding: 3px 6px;
     border-radius: 4px;
     font-size: 11px;
-    width: 90px;
+    width: 100px;
     text-align: center;
 }
 
 input[type="number"] {
     width: 50px;
-}
-
-#swap-btn {
-    background: #282828;
-    color: #ffd700;
-    border: 1px solid #444;
-    padding: 4px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-}
-
-#swap-btn:hover {
-    background: #3d3d3d;
 }
 
 .button-group {
@@ -90,16 +87,16 @@ input[type="number"] {
 }
 
 .display-btn.active {
-    background: #ffd700;
+    background: #EE964B !important; /* Updated Primary Color */
     color: #000;
     font-weight: bold;
-    border-color: #ffd700;
+    border-color: #EE964B;
 }
 
 h2 {
     font-size: 14px;
     margin: 0;
-    color: #ffd700;
+    color: #EE964B;
 }
 
 #pin-btn {
@@ -116,7 +113,7 @@ h2 {
     background-color: #161616;
     border: 1px solid #282828;
     border-radius: 6px;
-    height: 120px;
+    height: 100px;
     overflow-y: auto;
     padding: 8px;
     font-family: monospace;

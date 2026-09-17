@@ -8,30 +8,44 @@
 <body>
     <div class="container">
         <div class="header-row">
-            <h2>2Subs2Learn Settings</h2>
-            <button id="pin-btn" title="Pin / Open in separate tab">📌 Pin</button>
+            <h2>2Subs2Learn <span id="toolbar-pct" style="font-size: 11px; color: #EE964B;">(0% Ready)</span></h2>
+            <button id="pin-btn" title="Pin / Open in separate tab">📌</button>
         </div>
         
         <div class="settings-group">
-            <h3>Translation Pair</h3>
-            <div class="settings-row translation-swap-row">
+            <h3>Settings</h3>
+            <div class="settings-row">
+                <span>Translate from</span>
                 <select id="source-lang">
                     <option value="en">English</option>
                     <option value="de">German</option>
                 </select>
-                <button id="swap-btn" title="Swap languages">⇄</button>
+            </div>
+            <div class="settings-row">
+                <span>Translate to</span>
                 <select id="target-lang">
                     <option value="de" selected>German</option>
                     <option value="en">English</option>
                 </select>
             </div>
+            <div class="settings-row swap-container">
+                <button id="swap-btn">Swap Languages ⇄</button>
+            </div>
         </div>
 
         <div class="settings-group">
-            <h3>On-Screen Display Mode (Primary)</h3>
+            <h3>Display Mode</h3>
             <div class="button-group">
-                <button class="display-btn active" data-value="target">Target (Large)</button>
-                <button class="display-btn" data-value="source">Source (Large)</button>
+                <button class="display-btn active" data-value="target">Target Primary</button>
+                <button class="display-btn" data-value="source">Source Primary</button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <h3>YouTube Embedded Toolbar</h3>
+            <div class="settings-row">
+                <span>Show Toolbar on Page</span>
+                <input type="checkbox" id="embedded-toggle" checked>
             </div>
         </div>
 

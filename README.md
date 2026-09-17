@@ -4,6 +4,8 @@
 
 **2Subs2Learn** is a powerful, lightweight browser extension designed to display dual subtitles on video streaming platforms. It was developed out of frustration with existing paid solutions (such as Intersub) that lock fundamental dual-subtitle features behind expensive subscriptions. 2Subs2Learn gives you complete freedom, utilizing local neural machine translation models to bridge language barriers seamlessly.
 
+   ![Subreddit Input](./assets/Screenshot-1.png)
+
 ## 2. How it works
 
 * **Sliding-Window Batch Translation:** Subtitles are grouped into performance-optimized batches, pre-fetched, and cached locally.

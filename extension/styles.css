@@ -27,16 +27,14 @@
     opacity: 1 !important;
 }
 
-/* Primary Line (Yellow and prominent) */
 .sub-line-primary {
     font-size: 20px !important;
-    color: #ffd700 !important;
+    color: #EE964B !important;
     font-weight: 500 !important;
     margin-bottom: 4px !important;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.9) !important;
 }
 
-/* Secondary Line (White and small) */
 .sub-line-secondary {
     font-size: 14px !important;
     color: #ffffff !important;
@@ -46,4 +44,81 @@
 
 .ytp-caption-window-container {
     display: none !important;
+}
+
+/* 1. Chunked Progress Bar styled above YouTube control bar */
+#2subs-chunked-progress {
+    width: 100%;
+    background: rgba(28, 28, 28, 0.9);
+    padding: 4px 10px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    z-index: 2000;
+}
+
+.chunks-track {
+    display: flex;
+    gap: 2px;
+    width: 100%;
+    height: 5px;
+}
+
+.chunk-segment {
+    flex: 1;
+    background: #3a86ff; /* Blue default track */
+    border-radius: 1px;
+    transition: background 0.3s ease;
+}
+
+.chunk-segment.translated {
+    background: #ffb703 !important; /* Yellow completed chunks */
+}
+
+/* 3. Embedded YouTube Toolbar */
+#2subs-embedded-toolbar {
+    background: #181818;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 16px;
+    color: #fff;
+    font-family: Roboto, Arial, sans-serif;
+}
+
+.embedded-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: bold;
+    border-bottom: 1px solid #333;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+}
+
+.embedded-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.embedded-row select, .embedded-row button {
+    background: #282828;
+    color: #fff;
+    border: 1px solid #444;
+    padding: 3px 6px;
+    border-radius: 4px;
+}
+
+.emb-btn {
+    flex: 1;
+    cursor: pointer;
+}
+
+.emb-btn.active {
+    background: #EE964B !important;
+    color: #000;
+    font-weight: bold;
 }

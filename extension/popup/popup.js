@@ -8,24 +8,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayButtons = document.querySelectorAll('.display-btn');
     const batchInput = document.getElementById('batch-size');
     const offsetInput = document.getElementById('prefetch-offset');
+    const embeddedToggle = document.getElementById('embedded-toggle');
+    const toolbarPct = document.getElementById('toolbar-pct');
 
     let currentPrimaryDisplay = 'target';
 
-    // Load saved settings
-    chrome.storage.local.get(['sourceLang', 'targetLang', 'primaryDisplay', 'batchSize', 'prefetchOffset'], (data) => {
+    chrome.storage.local.get(['sourceLang', 'targetLang', 'primaryDisplay', 'batchSize', 'prefetchOffset', 'embeddedToolbar'], (data) => {
         if (data.sourceLang) sourceSelect.value = data.sourceLang;
         if (data.targetLang) targetSelect.value = data.targetLang;
         if (data.batchSize) batchInput.value = data.batchSize;
         if (data.prefetchOffset) offsetInput.value = data.prefetchOffset;
+        if (data.embeddedToolbar !== undefined) embeddedToggle.checked = data.embeddedToolbar;
         
         if (data.primaryDisplay) {
             currentPrimaryDisplay = data.primaryDisplay;
             displayButtons.forEach(btn => {
-                if (btn.dataset.value === currentPrimaryDisplay) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
+                if (btn.dataset.value === currentPrimaryDisplay) btn.classList.add('active');
+                else btn.classList.remove('active');
             });
         }
     });
@@ -35,16 +34,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetLang = targetSelect.value;
         const batchSize = batchInput.value;
         const prefetchOffset = offsetInput.value;
+        const embeddedToolbar = embeddedToggle.checked;
 
         chrome.storage.local.set({ 
             sourceLang, 
             targetLang, 
             primaryDisplay: currentPrimaryDisplay,
             batchSize,
-            prefetchOffset
+            prefetchOffset,
+            embeddedToolbar
         });
 
-        // Safely send message to active tab if content script is present
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]?.id) {
                 chrome.tabs.sendMessage(tabs[0].id, {
@@ -53,15 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     targetLang,
                     primaryDisplay: currentPrimaryDisplay,
                     batchSize,
-                    prefetchOffset
-                }).catch(() => {
-                    // Ignore error if content script hasn't injected yet on non-youtube pages
-                });
+                    prefetchOffset,
+                    embeddedToolbar
+                }).catch(() => {});
             }
         });
     }
 
-    // Swap Languages button handler
     swapBtn.addEventListener('click', () => {
         const temp = sourceSelect.value;
         sourceSelect.value = targetSelect.value;
@@ -69,7 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
         broadcastSettings();
     });
 
-    // Display mode buttons handler
     displayButtons.forEach(button => {
         button.addEventListener('click', () => {
             displayButtons.forEach(b => b.classList.remove('active'));
@@ -83,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     targetSelect.addEventListener('change', broadcastSettings);
     batchInput.addEventListener('change', broadcastSettings);
     offsetInput.addEventListener('change', broadcastSettings);
+    embeddedToggle.addEventListener('change', broadcastSettings);
 
     pinBtn.addEventListener('click', () => {
         chrome.tabs.create({ url: chrome.runtime.getURL('popup/popup.html') });
@@ -95,6 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
             div.textContent = `[${message.time}] ${message.text}`;
             logContainer.appendChild(div);
             logContainer.scrollTop = logContainer.scrollHeight;
+        } else if (message.type === "UPDATE_PROGRESS") {
+            toolbarPct.textContent = `(${message.percentage}% Ready)`;
         }
     });
 });
