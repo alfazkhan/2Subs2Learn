@@ -36,7 +36,7 @@ cd 2Subs2Learn
 ```bash
 cd server
 npm install
-node server.js
+node server.js  
 
 ```
 
