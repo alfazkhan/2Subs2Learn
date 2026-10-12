@@ -12,7 +12,6 @@ export default function subtitleSelection(availableTranslations: YouTubeCaptionT
         const appWrapper = document.createElement('div');
         appWrapper.id = containerId;
         appWrapper.className = 'yt-2subs-wrapper';
-
         document.body.appendChild(appWrapper);
         const root = ReactDOM.createRoot(appWrapper);
 

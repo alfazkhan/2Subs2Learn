@@ -1,5 +1,9 @@
 // constants/youtubeLanguages.ts
-export const YOUTUBE_TRANSLATION_LANGUAGES = [
+interface languages{
+    code:string,
+    name:string
+}
+export const YOUTUBE_TRANSLATION_LANGUAGES: languages[] = [
     { code: 'en', name: 'English' },
     { code: 'de', name: 'German' },
     { code: 'es', name: 'Spanish' },
@@ -19,7 +23,6 @@ export const YOUTUBE_TRANSLATION_LANGUAGES = [
     { code: 'vi', name: 'Vietnamese' },
     { code: 'uk', name: 'Ukrainian' },
     { code: 'sv', name: 'Swedish' },
-    { code: 'id', name: 'Indonesian' },
     { code: 'el', name: 'Greek' },
     { code: 'cs', name: 'Czech' },
     { code: 'hu', name: 'Hungarian' },

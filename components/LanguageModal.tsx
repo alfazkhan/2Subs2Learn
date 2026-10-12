@@ -10,7 +10,7 @@ interface LanguageModalProps {
 
 export default function LanguageModal({ availableTranslations, onConfirm }: LanguageModalProps) {
     // Filter source options to ONLY include human-curated manual subtitles (kind !== 'asr')
-    const manualTracks = availableTranslations.filter(t => t.kind !== 'asr');
+    const manualTracks = availableTranslations.filter(t => t.kind !== 'asr') || [];
 
     const defaultSource = manualTracks.length > 0 ? manualTracks[0].languageCode : 'en';
     const [sourceLang, setSourceLang] = useState<string>(defaultSource);

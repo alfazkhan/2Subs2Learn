@@ -25,7 +25,7 @@ export default defineContentScript({
                 isWaitingForUserSelection = false;
                 const video = document.querySelector('video') as HTMLVideoElement;
                 const player = document.getElementById('movie_player') as any;
-                if (video) video.play().catch(() => {});
+                if (video) video.play().catch(() => { });
                 if (player && typeof player.playVideo === 'function') player.playVideo();
             }
 
@@ -35,9 +35,16 @@ export default defineContentScript({
             }
         });
 
+
         function notifyAvailableTracks() {
             const playerResponse = (window as any).ytInitialPlayerResponse;
             const currentVideoId = playerResponse?.videoDetails?.videoId;
+            const videoElement = document.querySelector('video') as HTMLVideoElement;
+
+            if (videoElement && !videoElement.paused && isNaN(videoElement.duration) && videoElement.duration !== Infinity) {
+                console.log("PAUSING VIDEO")
+                videoElement.pause();
+            }
 
             if (!currentVideoId || currentVideoId === lastProcessedVideoId) {
                 return;
@@ -46,11 +53,12 @@ export default defineContentScript({
             lastProcessedVideoId = currentVideoId;
             isWaitingForUserSelection = true;
             const availableTracks = fetchSubtitles();
+            console.log("AVAILABLE TRACKS", availableTracks)
 
             if (availableTracks.length > 0) {
                 window.postMessage({
                     type: 'AVAILABLE_TRACKS_READY',
-                    payload: availableTracks
+                    payload: { availableTracks, currentVideoId }
                 }, '*');
             }
         }
@@ -62,6 +70,7 @@ export default defineContentScript({
             if (freshResponse) {
                 (window as any).ytInitialPlayerResponse = freshResponse;
             }
+
             notifyAvailableTracks();
         });
     }

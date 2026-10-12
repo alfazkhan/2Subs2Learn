@@ -4,9 +4,13 @@ import React from 'react';
 import subtitleSelection from './youtube.content/subtitleSelection';
 import SubtitleOverlay from '@/components/SubtitleOverlay';
 import type { ParsedCue } from '@/types/youtubeTypes';
+import { storage } from '#imports';
+import type { YouTubeCaptionTrack } from "@/types/youtubeTypes";
+
+
 
 export default defineContentScript({
-    matches: ['*://*.youtube.com/*'],
+    matches: ['*://*.youtube.com/watch*'],
 
     async main() {
         let overlayRoot: ReactDOM.Root | null = null;
@@ -19,16 +23,16 @@ export default defineContentScript({
             for (let i = 0; i < length; i++) {
                 const s = sourceCues[i];
                 const t = targetCues[i];
-                
+
                 const sEnd = s.start + s.duration;
                 const tEnd = t.start + t.duration;
-                
+
                 const minStart = Math.min(s.start, t.start);
                 const maxEnd = Math.max(sEnd, tEnd);
-                
+
                 s.start = minStart;
                 s.duration = maxEnd - minStart;
-                
+
                 t.start = minStart;
                 t.duration = maxEnd - minStart;
             }
@@ -41,7 +45,7 @@ export default defineContentScript({
             while (left <= right) {
                 const mid = Math.floor((left + right) / 2);
                 const cue = cues[mid];
-                
+
                 if (time >= cue.start && time <= (cue.start + cue.duration)) {
                     return cue.text;
                 } else if (time < cue.start) {
@@ -50,33 +54,48 @@ export default defineContentScript({
                     left = mid + 1;
                 }
             }
-            
+
             const fallbackIndex = cues.findIndex(cue => cue.start >= time);
             if (fallbackIndex > 0 && time >= cues[fallbackIndex - 1].start && time <= (cues[fallbackIndex - 1].start + cues[fallbackIndex - 1].duration)) {
-                 return cues[fallbackIndex - 1].text;
+                return cues[fallbackIndex - 1].text;
             }
-            
+
             return "";
         };
 
         window.addEventListener('message', (event) => {
             if (event.source !== window || !event.data) return;
 
-            if (event.data.type === 'AVAILABLE_TRACKS_READY') {
-                const tracks = event.data.payload;
-                console.log("[ISOLATED] Subtitle tracks detected. Opening selection modal...");
-                
-                const videoElement = document.querySelector('video') as HTMLVideoElement;
-                if (videoElement && !videoElement.paused) {
-                    videoElement.pause();
+            if (event.data.type === 'AVAILABLE_TRACKS_READY') { //When subtitles are ready
+                const tracks: [] = event.data.payload.availableTracks;
+                const currentVideoID = event.data.payload.currentVideoId;
+                const saveTracksToMemory = async () => {
+                    console.log("SAVING TRACKS TO STORAGE FOR", currentVideoID)
+                    const captionTracks = await storage.getItem<[string, YouTubeCaptionTrack[]][]>('local:availableTracks')
+                    if (captionTracks) {
+                        const captionsMap = new Map(captionTracks || [])
+                        console.log("CAPTIONS MAP", captionsMap)
+                        captionsMap.set(currentVideoID, tracks)
+                        await storage.setItem('local:availableTracks', Array.from(captionsMap.entries()));
+                    } else {
+                        console.log("INITIALIZING INITIAL TRACKS ARRAY")
+                        await storage.setItem('local:availableTracks', [[currentVideoID, tracks]]);
+                    }
                 }
-
-                subtitleSelection(tracks);
+                saveTracksToMemory()
+                if (tracks.length > 1) {
+                    if (tracks[0].kind !== 'asr') {
+                        subtitleSelection(tracks);
+                    }
+                } else {
+                    console.log("NO SUPPORTED SUBS PLAYING VIDEO")
+                    window.postMessage({ type: 'PLAY_VIDEO' }, '*');
+                }
             }
 
             if (event.data.type === 'RELAY_SUBTITLES_TO_ISOLATED') {
                 const { sourceArray, targetArray } = event.data.payload;
-                
+
                 const playerContainer = document.querySelector('.html5-video-player');
                 if (!playerContainer) return;
 
@@ -109,11 +128,11 @@ export default defineContentScript({
                         if (currentSource !== lastSource || currentTarget !== lastTarget) {
                             lastSource = currentSource;
                             lastTarget = currentTarget;
-                            
+
                             overlayRoot?.render(
-                                React.createElement(SubtitleOverlay, { 
-                                    sourceText: currentSource, 
-                                    targetText: currentTarget 
+                                React.createElement(SubtitleOverlay, {
+                                    sourceText: currentSource,
+                                    targetText: currentTarget
                                 })
                             );
                         }

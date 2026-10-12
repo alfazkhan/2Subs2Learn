@@ -7,10 +7,10 @@ export default defineConfig({
   webExt: {
     disabled: true,
   },
-  outDir: 'releases',
+  // outDir: 'releases',
   manifest: {
     name: '2Subs2Learn',
-    version: '0.0.1',
+    version: '0.0.2',
     permissions: ['storage'],
     host_permissions: [
       "https://www.youtube.com/*",

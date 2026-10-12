@@ -1,4 +1,5 @@
 // components/SubtitleOverlay.tsx
+import { storage } from '#imports';
 import React from 'react';
 
 interface SubtitleOverlayProps {
@@ -9,6 +10,14 @@ interface SubtitleOverlayProps {
 export default function SubtitleOverlay({ sourceText, targetText }: SubtitleOverlayProps) {
     // Determine if both texts are completely empty to toggle visibility while maintaining structural height
     const hasText = sourceText.trim() !== "" || targetText.trim() !== "";
+
+    React.useEffect(()=>{
+        async function fetchData(){
+            const translationPref = await storage.getItem('local:translationPref');
+            console.log(translationPref)
+        }
+        fetchData()
+    },[])
 
     return (
         <div 
@@ -45,7 +54,7 @@ export default function SubtitleOverlay({ sourceText, targetText }: SubtitleOver
                 marginBottom: '4px',
                 minHeight: '28px' // Reserves space even if only bottom sub exists
             }}>
-                {targetText}
+                {sourceText}
             </div>
             
             {/* Source Language - Small & White */}
@@ -57,7 +66,7 @@ export default function SubtitleOverlay({ sourceText, targetText }: SubtitleOver
                 textShadow: '1px 1px 2px rgba(0,0,0,0.9)',
                 minHeight: '20px'
             }}>
-                {sourceText}
+                {targetText}
             </div>
         </div>
     );
