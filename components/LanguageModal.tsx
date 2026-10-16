@@ -1,6 +1,6 @@
 // components/LanguageModal.tsx
 import React, { useState } from 'react';
-import type { YouTubeCaptionTrack } from '@/types/youtubeTypes';
+import type { YouTubeCaptionTrack, TranslationPref } from '@/types/youtubeTypes';
 import { YOUTUBE_TRANSLATION_LANGUAGES } from '@/constants/youtubeLanguages';
 
 interface LanguageModalProps {
@@ -15,9 +15,21 @@ export default function LanguageModal({ availableTranslations, onConfirm }: Lang
     const defaultSource = manualTracks.length > 0 ? manualTracks[0].languageCode : 'en';
     const [sourceLang, setSourceLang] = useState<string>(defaultSource);
     const [targetLang, setTargetLang] = useState<string>('de');
+    const [isLoading, setIsLoading] = useState<boolean>(false)
 
+
+    React.useEffect(() => {
+        async function fetchPref() {
+            const pref = await storage.getItem<TranslationPref>('local:translationPref')
+            console.log("USE EFFECT", pref)
+            setSourceLang(pref?.sourceLang)
+            setTargetLang(pref?.targetLang)
+        }
+        fetchPref()
+    }, [])
     const handleConfirm = () => {
         onConfirm(sourceLang, targetLang);
+        setIsLoading(true)
     };
 
     return (
@@ -27,7 +39,7 @@ export default function LanguageModal({ availableTranslations, onConfirm }: Lang
             </h2>
 
             <div className="yt-2subs-row">
-                <span>Translate from</span>
+                <span>Translate from (Primary Subtitle)</span>
                 <select
                     value={sourceLang}
                     onChange={(e) => setSourceLang(e.target.value)}
@@ -42,7 +54,7 @@ export default function LanguageModal({ availableTranslations, onConfirm }: Lang
             </div>
 
             <div className="yt-2subs-row">
-                <span>Translate to</span>
+                <span>Translate to (Secondary Subtitle)</span>
                 <select
                     value={targetLang}
                     onChange={(e) => setTargetLang(e.target.value)}
@@ -60,8 +72,9 @@ export default function LanguageModal({ availableTranslations, onConfirm }: Lang
                 type="button"
                 onClick={handleConfirm}
                 className="yt-2subs-button"
+                disabled={isLoading}
             >
-                Confirm & Play
+                {isLoading ? "Loading..." : "Confirm & Play"}
             </button>
         </div>
     );

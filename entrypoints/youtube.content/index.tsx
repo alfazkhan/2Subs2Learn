@@ -3,20 +3,14 @@ import fetchSubtitles from "./fetchSubtitles";
 import { handleSubtitleExtraction } from "./subtitleExtractor";
 
 export default defineContentScript({
-    matches: ['*://*.youtube.com/*'],
+    matches: ['*://*.youtube.com/watch*'],
     world: 'MAIN',
 
     async main() {
         let lastProcessedVideoId = "";
-        let isWaitingForUserSelection = true;
-
-        document.addEventListener('play', (e: Event) => {
-            const target = e.target as HTMLElement;
-            if (target && target.tagName === 'VIDEO' && isWaitingForUserSelection) {
-                e.stopPropagation();
-                (target as HTMLVideoElement).pause();
-            }
-        }, true);
+        let isWaitingForUserSelection = false;
+        let adCheckInterval: NodeJS.Timeout | null = null;
+        let navigationTimestamp = Date.now();
 
         window.addEventListener('message', (event) => {
             if (event.source !== window || !event.data) return;
@@ -30,30 +24,61 @@ export default defineContentScript({
             }
 
             if (event.data.type === 'START_INTERCEPT_SUBTITLES') {
+                console.log("EVENT: 'START_INTERCEPT_SUBTITLES'")
                 const { sourceTrack, targetTrack, targetLang } = event.data.payload;
                 handleSubtitleExtraction(sourceTrack, targetTrack, targetLang);
             }
         });
 
-
-        function notifyAvailableTracks() {
-            const playerResponse = (window as any).ytInitialPlayerResponse;
-            const currentVideoId = playerResponse?.videoDetails?.videoId;
+        function checkAndProcessVideo() {
+            const player = document.getElementById('movie_player') as any;
             const videoElement = document.querySelector('video') as HTMLVideoElement;
 
-            if (videoElement && !videoElement.paused && isNaN(videoElement.duration) && videoElement.duration !== Infinity) {
-                console.log("PAUSING VIDEO")
-                videoElement.pause();
-            }
+            if (!player || !videoElement) return;
+
+            const playerResponse = (window as any).ytInitialPlayerResponse;
+            const currentVideoId = playerResponse?.videoDetails?.videoId;
 
             if (!currentVideoId || currentVideoId === lastProcessedVideoId) {
                 return;
             }
 
+            // Strictly check active player ad states (avoiding permanent DOM wrappers)
+            const isAdShowing = 
+                player.classList.contains('ad-showing') ||
+                player.classList.contains('ad-interrupting') ||
+                (typeof player.getVideoData === 'function' && player.getVideoData()?.isAd === true);
+
+            if (isAdShowing) {
+                // An ad is actively playing, reset the timer to wait for it to finish
+                navigationTimestamp = Date.now();
+                return;
+            }
+
+            // Give a short 1-second buffer window right after navigation for a delayed ad to register.
+            if (Date.now() - navigationTimestamp < 1000) {
+                return;
+            }
+
+            if (isNaN(videoElement.duration) || videoElement.duration === 0) {
+                return; 
+            }
+
+            // Success: Clean video confirmed, ads have cleared
             lastProcessedVideoId = currentVideoId;
             isWaitingForUserSelection = true;
+
+            if (!videoElement.paused) {
+                videoElement.pause();
+            }
+            if (typeof player.pauseVideo === 'function') {
+                player.pauseVideo();
+            }
+
+            console.log("Video ready. Process started for:", currentVideoId);
+
             const availableTracks = fetchSubtitles();
-            console.log("AVAILABLE TRACKS", availableTracks)
+            console.log("AVAILABLE TRACKS", availableTracks);
 
             if (availableTracks.length > 0) {
                 window.postMessage({
@@ -61,9 +86,16 @@ export default defineContentScript({
                     payload: { availableTracks, currentVideoId }
                 }, '*');
             }
+
+            if (adCheckInterval) {
+                clearInterval(adCheckInterval);
+                adCheckInterval = null;
+            }
         }
 
-        notifyAvailableTracks();
+        adCheckInterval = setInterval(() => {
+            checkAndProcessVideo();
+        }, 200);
 
         document.addEventListener('yt-navigate-finish', (event: any) => {
             const freshResponse = event.detail?.response?.playerResponse || event.detail?.pageData?.playerResponse;
@@ -71,7 +103,15 @@ export default defineContentScript({
                 (window as any).ytInitialPlayerResponse = freshResponse;
             }
 
-            notifyAvailableTracks();
+            // Reset tracking parameters on new video load
+            navigationTimestamp = Date.now();
+            lastProcessedVideoId = ""; // Allow re-processing if navigating back to a previous ID
+
+            if (!adCheckInterval) {
+                adCheckInterval = setInterval(() => {
+                    checkAndProcessVideo();
+                }, 200);
+            }
         });
     }
 });

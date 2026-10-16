@@ -4,9 +4,12 @@ import LanguageModal from '@/components/LanguageModal.tsx';
 import { storage } from '#imports';
 import type { TranslationPref, YouTubeCaptionTrack } from '@/types/youtubeTypes';
 import './modal.css';
+import React from 'react';
 
 export default function subtitleSelection(availableTranslations: YouTubeCaptionTrack[]) {
     const containerId = 'youtube-dual-sub-modal-container';
+    console.log("Start subtitle selection")
+
 
     if (!document.getElementById(containerId)) {
         const appWrapper = document.createElement('div');
@@ -15,6 +18,7 @@ export default function subtitleSelection(availableTranslations: YouTubeCaptionT
         document.body.appendChild(appWrapper);
         const root = ReactDOM.createRoot(appWrapper);
 
+
         async function onLanguageConfirm(source: string, target: string) {
             try {
                 await storage.setItem<TranslationPref>('local:translationPref', {
@@ -22,11 +26,10 @@ export default function subtitleSelection(availableTranslations: YouTubeCaptionT
                     targetLang: target,
                 });
 
+                console.log(source, target, availableTranslations)
                 const sourceTrack = availableTranslations.find(t => t.languageCode === source && t.kind !== 'asr');
                 const targetTrack = availableTranslations.find(t => t.languageCode.startsWith(target) && t.kind !== 'asr');
 
-                // Simply command the MAIN script to extract the data.
-                // The MAIN script will relay it to youtube-ui.content.ts
                 window.postMessage({
                     type: 'START_INTERCEPT_SUBTITLES',
                     payload: {
@@ -36,19 +39,37 @@ export default function subtitleSelection(availableTranslations: YouTubeCaptionT
                     }
                 }, '*');
 
+                window.addEventListener('message', (event) => {
+                    if (event.source !== window || !event.data) return;
+                    if (event.data.type === 'REMOVE_LANGUAGE_POPUP') {
+                        console.log('EVENT REMOVE_LANGUAGE_POPUP')
+                        root.unmount();
+                        appWrapper.remove();
+                    }
+                });
+
             } catch (error) {
                 console.error("[subtitleSelection] Confirmation error:", error);
-            } finally {
-                root.unmount();
-                appWrapper.remove();
+            }
+            finally {
+                console.log("Running")
+                window.addEventListener('message', (event) => {
+                    if (event.source !== window || !event.data) return;
+
+                    if (event.data.type === 'REMOVE_LANGUAGE_POPUP') {
+                        console.log('EVENT REMOVE_LANGUAGE_POPUP')
+                        root.unmount();
+                        appWrapper.remove();
+                    }
+                });
             }
         }
 
         root.render(
             <div className="yt-2subs-backdrop">
-                <LanguageModal 
-                    availableTranslations={availableTranslations} 
-                    onConfirm={onLanguageConfirm} 
+                <LanguageModal
+                    availableTranslations={availableTranslations}
+                    onConfirm={onLanguageConfirm}
                 />
             </div>
         );

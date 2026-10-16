@@ -17,7 +17,7 @@ export function triggerAndInterceptTimedtextUrl(): Promise<string> {
             window.fetch = originalFetch;
         }
 
-        XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...rest: any[]) {
+        XMLHttpRequest.prototype.open = function (method: string, url: string | URL, ...rest: any[]) {
             const urlString = typeof url === 'string' ? url : url.toString();
             if (urlString.includes('/api/timedtext')) {
                 cleanup();
@@ -26,7 +26,7 @@ export function triggerAndInterceptTimedtextUrl(): Promise<string> {
             return originalXhrOpen.call(this, method, url, ...rest);
         };
 
-        window.fetch = async function(...args: any[]) {
+        window.fetch = async function (...args: any[]) {
             const firstArg = args[0];
             const urlString = typeof firstArg === 'string' ? firstArg : firstArg?.url;
             if (urlString && urlString.includes('/api/timedtext')) {
@@ -54,7 +54,7 @@ export function triggerAndInterceptTimedtextUrl(): Promise<string> {
 export async function fetchParsedSubtitle(url: string) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-    
+
     const rawText = await response.text();
     if (rawText.trim() === "1" || rawText.trim() === "") {
         throw new Error("YouTube returned empty or rejected response (1)");
@@ -78,8 +78,10 @@ export async function handleSubtitleExtraction(sourceTrack: YouTubeCaptionTrack,
     if (!player) return;
 
     try {
-        console.log("[MAIN] Activating subtitle stream to capture authenticated request...");
+        console.log("Activating subtitle stream to capture request...");
         const interceptedUrl = await triggerAndInterceptTimedtextUrl();
+                console.log(sourceTrack,targetTrack)
+
 
         const sourceUrlObj = new URL(interceptedUrl, window.location.origin);
         sourceUrlObj.searchParams.set('fmt', 'json3');
@@ -96,11 +98,11 @@ export async function handleSubtitleExtraction(sourceTrack: YouTubeCaptionTrack,
             targetUrlObj.searchParams.set('fmt', 'json3');
             targetUrlObj.searchParams.set('lang', resolvedTargetLang);
             targetUrlObj.searchParams.delete('tlang');
-            
+
             try {
                 targetArray = await fetchParsedSubtitle(targetUrlObj.toString());
             } catch (e) {
-                console.warn("[MAIN] Human-curated fetch failed, falling back to YouTube auto-translate.");
+                console.warn("Fetch failed, falling back to YouTube auto-translate.");
             }
         }
 
@@ -110,17 +112,23 @@ export async function handleSubtitleExtraction(sourceTrack: YouTubeCaptionTrack,
             translatedUrlObj.searchParams.set('tlang', resolvedTargetLang);
             targetArray = await fetchParsedSubtitle(translatedUrlObj.toString());
         }
-
+        console.log("FETCHED subtitles");
         if (typeof player.toggleSubtitles === 'function' && player.isSubtitlesOn()) {
             player.toggleSubtitles();
         }
-
+        
         window.postMessage({
             type: 'RELAY_SUBTITLES_TO_ISOLATED',
             payload: { sourceArray, targetArray }
         }, '*');
 
+
     } catch (error) {
         console.error("[MAIN] Subtitle interception pipeline failed:", error);
+        console.log("REMOVING POPUP FROM DOM DUE TO FAILURE")
+        window.postMessage({ type: 'REMOVE_LANGUAGE_POPUP' }, '*');
+    }finally{
+        console.log("Removing Popup")
+        window.postMessage({ type: 'REMOVE_LANGUAGE_POPUP' }, '*');
     }
 }

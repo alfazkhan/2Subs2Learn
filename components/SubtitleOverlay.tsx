@@ -10,17 +10,35 @@ interface SubtitleOverlayProps {
 export default function SubtitleOverlay({ sourceText, targetText }: SubtitleOverlayProps) {
     // Determine if both texts are completely empty to toggle visibility while maintaining structural height
     const hasText = sourceText.trim() !== "" || targetText.trim() !== "";
+    const [sourceFontSize, setSourceFontSize] = React.useState<number | null>(22)
+    const [targetFontSize, setTargetFontSize] = React.useState<number | null>(16)
 
-    React.useEffect(()=>{
-        async function fetchData(){
+    React.useEffect(() => {
+        async function fetchData() {
             const translationPref = await storage.getItem('local:translationPref');
-            console.log(translationPref)
+            const sourceFontSize = await storage.getItem<number>('local:sourceFontSize');
+            const targetFontSize = await storage.getItem<number>('local:targetFontSize');
+            setSourceFontSize(sourceFontSize)
+            setTargetFontSize(targetFontSize)
         }
+        const unwatchTargetFontSize = storage.watch<number>('local:targetFontSize', (newCount, oldCount) => {
+            setTargetFontSize(newCount)
+            console.log('Target Font Changed:', { newCount, oldCount });
+        });
+        const unwatchSourceFontSize = storage.watch<number>('local:sourceFontSize', (newCount, oldCount) => {
+            setSourceFontSize(newCount)
+            console.log('Source Font Changed:', { newCount, oldCount });
+        });
         fetchData()
-    },[])
+
+        return () => {
+            unwatchTargetFontSize()
+            unwatchSourceFontSize()
+        }
+    }, [])
 
     return (
-        <div 
+        <div
             style={{
                 position: 'absolute',
                 bottom: '8%',
@@ -34,7 +52,6 @@ export default function SubtitleOverlay({ sourceText, targetText }: SubtitleOver
                 zIndex: 2147483647,
                 pointerEvents: 'none',
                 width: '80%',
-                // Unified background box matching the legacy UI
                 backgroundColor: 'rgba(12, 12, 12, 0.85)',
                 padding: '12px 24px',
                 borderRadius: '8px',
@@ -44,23 +61,23 @@ export default function SubtitleOverlay({ sourceText, targetText }: SubtitleOver
                 boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
             }}
         >
-            {/* Target Language - Large & Accent Color */}
+            {/* Source Language - Large & Accent Color */}
             <div style={{
                 color: '#F39C12', // Orange/Yellow accent matching the image
-                fontSize: '22px',
+                fontSize: `${sourceFontSize}px` || '22px',
                 fontFamily: '"YouTube Noto", Roboto, Arial, sans-serif',
                 fontWeight: '600',
                 textShadow: '1px 1px 2px rgba(0,0,0,0.9)',
                 marginBottom: '4px',
-                minHeight: '28px' // Reserves space even if only bottom sub exists
+                // minHeight: '28px' // Reserves space even if only bottom sub exists
             }}>
                 {sourceText}
             </div>
-            
-            {/* Source Language - Small & White */}
+
+            {/* Target Language - Small & White */}
             <div style={{
                 color: '#F0F0F0',
-                fontSize: '16px',
+                fontSize: `${targetFontSize}px` || '16px',
                 fontFamily: '"YouTube Noto", Roboto, Arial, sans-serif',
                 fontWeight: '400',
                 textShadow: '1px 1px 2px rgba(0,0,0,0.9)',

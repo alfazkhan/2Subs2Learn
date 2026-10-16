@@ -4,21 +4,49 @@ import { YOUTUBE_TRANSLATION_LANGUAGES } from '@/constants/youtubeLanguages';
 import type { TranslationPref } from '@/types/youtubeTypes';
 
 function App() {
-const [sourceLang, setSourceLang] = useState("English")
-const [targetLang, setTargetLang] = useState("German")
+  const [sourceLang, setSourceLang] = useState("English")
+  const [targetLang, setTargetLang] = useState("German")
+  const [sourceFontSize, setSourceFontSize] = useState<number | null>(22)
+  const [targetFontSize, setTargetFontSize] = useState<number | null>(16)
+
 
   useEffect(() => {
     async function fetchData() {
       const translationPref: TranslationPref = await storage.getItem('local:translationPref');
-      if(translationPref){
-        const sourceLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element)=> translationPref.sourceLang.includes(element.code) )
-        const targetLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element)=> translationPref.targetLang.includes(element.code) )
+      if (translationPref) {
+        const sourceLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element) => translationPref.sourceLang.includes(element.code))
+        const targetLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element) => translationPref.targetLang.includes(element.code))
+        const sourceFontSize = await storage.getItem<number>('local:sourceFontSize');
+        const targetFontSize = await storage.getItem<number>('local:targetFontSize');
+        setSourceFontSize(sourceFontSize)
+        setTargetFontSize(targetFontSize)
         setSourceLang(sourceLang.name)
         setTargetLang(targetLang.name)
       }
     }
     fetchData()
   }, [])
+
+  async function changeHandler(operation: string, value: string) {
+    console.log(operation, value)
+    if (operation === "+") {
+      switch (value) {
+        case "sourceFontSize":
+          await storage.setItem("local:sourceFontSize", sourceFontSize + 1)
+          setSourceFontSize(old => old + 1)
+          break;
+        case "targetFontSize":
+          await storage.setItem("local:targetFontSize", targetFontSize + 1)
+          setTargetFontSize(old => old + 1)
+          break;
+      }
+    } else if (operation === "-") {
+      await storage.setItem(`local:${value}`, targetFontSize - 1)
+      setTargetFontSize(old => old - 1)
+    }
+  }
+
+
 
   return (
     <div className="w-95 bg-[#12141c] text-white flex flex-col justify-between select-none font-sans min-h-100">
@@ -47,7 +75,7 @@ const [targetLang, setTargetLang] = useState("German")
       </div>
 
       {/* Settings Menu List */}
-      <div className="flex flex-col flex-grow divide-y divide-white/5">
+      <div className="flex flex-col grow divide-y divide-white/5">
 
         <RowItem onClick={() => { }}>
           <span className="text-sm font-medium text-gray-200">Translate From</span>
@@ -82,18 +110,18 @@ const [targetLang, setTargetLang] = useState("German")
         <RowItem>
           <span className="text-sm font-medium text-gray-200">Target language size</span>
           <CounterControl
-            value="100%"
-            onDecrease={() => { }}
-            onIncrease={() => { }}
+            value={sourceFontSize + "px"}
+            onDecrease={() => changeHandler("-", "sourceFontSize")}
+            onIncrease={() => changeHandler("+", "sourceFontSize")}
           />
         </RowItem>
 
         <RowItem>
           <span className="text-sm font-medium text-gray-200">My language size</span>
           <CounterControl
-            value="100%"
-            onDecrease={() => { }}
-            onIncrease={() => { }}
+            value={targetFontSize + "px"}
+            onDecrease={() => changeHandler("-", "targetFontSize")}
+            onIncrease={() => changeHandler("+", "targetFontSize")}
           />
         </RowItem>
 
@@ -137,7 +165,7 @@ function CounterControl({
   onDecrease,
   onIncrease
 }: {
-  value: string;
+  value: number | string;
   onDecrease?: () => void;
   onIncrease?: () => void;
 }) {
