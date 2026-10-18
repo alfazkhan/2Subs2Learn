@@ -21,10 +21,6 @@ console.warn = (...args) => {
 
 import express from 'express';
 import cors from 'cors';
-import { pipeline, env } from '@xenova/transformers';
-
-// Optional: allow local model cache storage in container
-env.allowLocalModels = false;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,59 +28,34 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-});
-
-const translators = {};
-
-async function getTranslator(sourceLang, targetLang) {
-    const key = `${sourceLang}-${targetLang}`;
-    if (translators[key]) return translators[key];
-
-    let modelName = 'Xenova/opus-mt-en-de';
-    if (sourceLang === 'de' && targetLang === 'en') {
-        modelName = 'Xenova/opus-mt-de-en';
-    }
-
-    console.log(`Loading translation model for ${key} (${modelName})...`);
-    translators[key] = await pipeline('translation', modelName, {
-        quantized: true
-    });
-    console.log(`Model ${key} loaded successfully.`);
-    return translators[key];
-}
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
 app.post('/translate', async (req, res) => {
     try {
         const { text, texts, sourceLang = 'en', targetLang = 'de' } = req.body;
-        const input = texts || text;
-        console.log({ "Input": input });
+        const inputs = Array.isArray(texts) ? texts : [text];
 
-        if (!input) {
-            return res.status(400).json({ error: 'Missing input text or texts array.' });
+        if (!inputs[0]) {
+            return res.status(400).json({ error: 'Missing input text.' });
         }
 
-        const model = await getTranslator(sourceLang, targetLang);
-        
-        const result = await model(input, { 
-            src_lang: sourceLang, 
-            tgt_lang: targetLang,
-            num_beams: 1 
-        });
+        // Translates via public instance with 0 MB model overhead
+        const translations = await Promise.all(
+            inputs.map(async (str) => {
+                const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(str)}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.translation;
+            })
+        );
 
-        if (Array.isArray(input)) {
-            const translations = result.map(r => r.translation_text);
-            console.log( { translations });
+        if (Array.isArray(texts)) {
             return res.json({ translations });
         } else {
-            const translation = result[0].translation_text;
-            console.log( { translation });
-            return res.json({ translation });
+            return res.json({ translation: translations[0] });
         }
-
-    } catch (error) {
-        console.error('Translation error:', error);
+    } catch (err) {
+        console.error('Translation error:', err);
         return res.status(500).json({ error: 'Internal server error.' });
     }
 });
