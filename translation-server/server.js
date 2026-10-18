@@ -1,13 +1,12 @@
 // server/server.js
 
-// Suppress ONNX runtime warning logs and noisy stdout messages
 const originalLog = console.log;
 const originalWarn = console.warn;
 
 console.log = (...args) => {
     const msg = args.join(' ');
     if (msg.includes('onnxruntime') || msg.includes('CleanUnusedInitializers') || msg.includes('MarianTokenizer')) {
-        return; // Skip unwanted warning prints
+        return;
     }
     originalLog(...args);
 };
@@ -15,20 +14,27 @@ console.log = (...args) => {
 console.warn = (...args) => {
     const msg = args.join(' ');
     if (msg.includes('onnxruntime') || msg.includes('MarianTokenizer')) {
-        return; // Skip unwanted warning prints
+        return;
     }
     originalWarn(...args);
 };
 
 import express from 'express';
 import cors from 'cors';
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
+
+// Optional: allow local model cache storage in container
+env.allowLocalModels = false;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cors());
+
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
 
 const translators = {};
 
@@ -42,7 +48,9 @@ async function getTranslator(sourceLang, targetLang) {
     }
 
     console.log(`Loading translation model for ${key} (${modelName})...`);
-    translators[key] = await pipeline('translation', modelName);
+    translators[key] = await pipeline('translation', modelName, {
+        quantized: true
+    });
     console.log(`Model ${key} loaded successfully.`);
     return translators[key];
 }
@@ -51,7 +59,7 @@ app.post('/translate', async (req, res) => {
     try {
         const { text, texts, sourceLang = 'en', targetLang = 'de' } = req.body;
         const input = texts || text;
-        console.log(Date.now(),{"Input":input})
+        console.log({ "Input": input });
 
         if (!input) {
             return res.status(400).json({ error: 'Missing input text or texts array.' });
@@ -65,12 +73,14 @@ app.post('/translate', async (req, res) => {
             num_beams: 1 
         });
 
-         if (Array.isArray(input)) {
-            console.log(Date.now(),{ translations: result.map(r => r.translation_text) })
-            return res.json({ translations: result.map(r => r.translation_text) });
+        if (Array.isArray(input)) {
+            const translations = result.map(r => r.translation_text);
+            console.log( { translations });
+            return res.json({ translations });
         } else {
-            console.log(Date.now(),{ translation: result[0].translation_text })
-            return res.json({ translation: result[0].translation_text });
+            const translation = result[0].translation_text;
+            console.log( { translation });
+            return res.json({ translation });
         }
 
     } catch (error) {
@@ -79,6 +89,6 @@ app.post('/translate', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server listening on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT}`);
 });

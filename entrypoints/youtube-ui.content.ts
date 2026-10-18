@@ -129,6 +129,7 @@ export default defineContentScript({
                 const tracks: [] = event.data.payload.availableTracks;
                 const currentVideoID = event.data.payload.currentVideoId;
                 const saveTracksToMemory = async () => {
+                    await storage.setItem('local:currentVideoID',currentVideoID)
                     const captionTracks = await storage.getItem<[string, YouTubeCaptionTrack[]][]>('local:availableTracks');
                     if (captionTracks) {
                         const captionsMap = new Map(captionTracks || []);

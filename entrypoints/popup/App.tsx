@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import './App.css';
 import { YOUTUBE_TRANSLATION_LANGUAGES } from '@/constants/youtubeLanguages';
-import type { TranslationPref } from '@/types/youtubeTypes';
+import type { TranslationPref, YouTubeCaptionTrack } from '@/types/youtubeTypes';
 
 function App() {
   const [sourceLang, setSourceLang] = useState("English")
@@ -16,8 +16,13 @@ function App() {
       if (translationPref) {
         const sourceLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element) => translationPref.sourceLang.includes(element.code))
         const targetLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element) => translationPref.targetLang.includes(element.code))
-        const sourceFontSize = await storage.getItem<number>('local:sourceFontSize');
-        const targetFontSize = await storage.getItem<number>('local:targetFontSize');
+        const sourceFontSize = await storage.getItem<number>('local:sourceFontSize') || 22;
+        const targetFontSize = await storage.getItem<number>('local:targetFontSize') || 16;
+        const currentVideoId: string = await storage.getItem('local:currentVideoID') || "";
+        const availableTracks: [string, YouTubeCaptionTrack[]][] = await storage.getItem('local:availableTracks') || [];
+        const captionsMap = new Map(availableTracks || []);
+        const availableLanguages = captionsMap.get(currentVideoId)?.map((e) => (e.name.simpleText))
+        console.log(availableLanguages)
         setSourceFontSize(sourceFontSize)
         setTargetFontSize(targetFontSize)
         setSourceLang(sourceLang.name)
