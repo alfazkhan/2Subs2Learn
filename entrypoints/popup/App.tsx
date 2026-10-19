@@ -8,6 +8,8 @@ function App() {
   const [targetLang, setTargetLang] = useState("German")
   const [sourceFontSize, setSourceFontSize] = useState<number | null>(22)
   const [targetFontSize, setTargetFontSize] = useState<number | null>(16)
+  const [windowWidth, setWindowWidth] = useState<number | null>(80)
+  const [verticalPosition, setVerticalPosition] = useState<number | null>(8)
 
 
   useEffect(() => {
@@ -16,39 +18,41 @@ function App() {
       if (translationPref) {
         const sourceLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element) => translationPref.sourceLang.includes(element.code))
         const targetLang = YOUTUBE_TRANSLATION_LANGUAGES.find((element) => translationPref.targetLang.includes(element.code))
-        const sourceFontSize = await storage.getItem<number>('local:sourceFontSize') || 22;
-        const targetFontSize = await storage.getItem<number>('local:targetFontSize') || 16;
         const currentVideoId: string = await storage.getItem('local:currentVideoID') || "";
         const availableTracks: [string, YouTubeCaptionTrack[]][] = await storage.getItem('local:availableTracks') || [];
         const captionsMap = new Map(availableTracks || []);
         const availableLanguages = captionsMap.get(currentVideoId)?.map((e) => (e.name.simpleText))
         console.log(availableLanguages)
-        setSourceFontSize(sourceFontSize)
-        setTargetFontSize(targetFontSize)
         setSourceLang(sourceLang.name)
         setTargetLang(targetLang.name)
       }
+      const sourceFontSize = await storage.getItem<number>('local:sourceFontSize');
+      const targetFontSize = await storage.getItem<number>('local:targetFontSize');
+      const windowWidth = await storage.getItem<number>('local:windowWidth');
+      const verticalPosition = await storage.getItem<number>('local:verticalPosition');
+      console.log(sourceFontSize, targetFontSize, windowWidth, verticalPosition)
+      if (sourceFontSize) setSourceFontSize(sourceFontSize);
+      if (targetFontSize) setTargetFontSize(targetFontSize);
+      if (windowWidth) setWindowWidth(windowWidth)
+      if (verticalPosition) setVerticalPosition(verticalPosition)
     }
     fetchData()
   }, [])
 
-  async function changeHandler(operation: string, value: string) {
-    console.log(operation, value)
-    if (operation === "+") {
-      switch (value) {
-        case "sourceFontSize":
-          await storage.setItem("local:sourceFontSize", sourceFontSize + 1)
-          setSourceFontSize(old => old + 1)
-          break;
-        case "targetFontSize":
-          await storage.setItem("local:targetFontSize", targetFontSize + 1)
-          setTargetFontSize(old => old + 1)
-          break;
-      }
-    } else if (operation === "-") {
-      await storage.setItem(`local:${value}`, targetFontSize - 1)
-      setTargetFontSize(old => old - 1)
+  async function changeHandler(operation: string, oldValue: number | null, value: string, changeFn: Function) {
+    console.log(operation, oldValue)
+    let newValue: number | null = oldValue
+    if (operation === "+" && newValue) {
+      newValue++
+      changeFn(old => old + 1)
+    } else if (operation === "-" && newValue) {
+      newValue--
+      changeFn(old => old - 1)
+    } else {
+      return
     }
+
+    await storage.setItem(`local:${value}`, newValue)
   }
 
 
@@ -116,8 +120,8 @@ function App() {
           <span className="text-sm font-medium text-gray-200">Target language size</span>
           <CounterControl
             value={sourceFontSize + "px"}
-            onDecrease={() => changeHandler("-", "sourceFontSize")}
-            onIncrease={() => changeHandler("+", "sourceFontSize")}
+            onDecrease={() => changeHandler("-", sourceFontSize, "sourceFontSize", setSourceFontSize)}
+            onIncrease={() => changeHandler("+", sourceFontSize, "sourceFontSize", setSourceFontSize)}
           />
         </RowItem>
 
@@ -125,26 +129,26 @@ function App() {
           <span className="text-sm font-medium text-gray-200">My language size</span>
           <CounterControl
             value={targetFontSize + "px"}
-            onDecrease={() => changeHandler("-", "targetFontSize")}
-            onIncrease={() => changeHandler("+", "targetFontSize")}
+            onDecrease={() => changeHandler("-", targetFontSize, "targetFontSize", setTargetFontSize)}
+            onIncrease={() => changeHandler("+", targetFontSize, "targetFontSize", setTargetFontSize)}
           />
         </RowItem>
 
         <RowItem>
           <span className="text-sm font-medium text-gray-200">Translation window size</span>
           <CounterControl
-            value="100%"
-            onDecrease={() => { }}
-            onIncrease={() => { }}
+            value={windowWidth + "%"}
+            onDecrease={() => changeHandler("-", windowWidth, "windowWidth", setWindowWidth)}
+            onIncrease={() => changeHandler("+", windowWidth, "windowWidth", setWindowWidth)}
           />
         </RowItem>
 
         <RowItem>
           <span className="text-sm font-medium text-gray-200">Subs vertical position</span>
           <CounterControl
-            value="0"
-            onDecrease={() => { }}
-            onIncrease={() => { }}
+            value={verticalPosition + "%"}
+            onDecrease={() => changeHandler("-", verticalPosition, "verticalPosition", setVerticalPosition)}
+            onIncrease={() => changeHandler("+", verticalPosition, "verticalPosition", setVerticalPosition)}
           />
         </RowItem>
 

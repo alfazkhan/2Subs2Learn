@@ -11,7 +11,10 @@ export default defineContentScript({
         let isWaitingForUserSelection = false;
         let adCheckInterval: NodeJS.Timeout | null = null;
         let navigationTimestamp = Date.now();
-
+        async function setPlatform() {
+            await storage.setItem(`local:currentPlatform`, "YOUTUBE")
+        }
+        setPlatform()
         window.addEventListener('message', (event) => {
             if (event.source !== window || !event.data) return;
 
@@ -44,7 +47,7 @@ export default defineContentScript({
             }
 
             // Strictly check active player ad states (avoiding permanent DOM wrappers)
-            const isAdShowing = 
+            const isAdShowing =
                 player.classList.contains('ad-showing') ||
                 player.classList.contains('ad-interrupting') ||
                 (typeof player.getVideoData === 'function' && player.getVideoData()?.isAd === true);
@@ -61,10 +64,10 @@ export default defineContentScript({
             }
 
             if (isNaN(videoElement.duration) || videoElement.duration === 0) {
-                return; 
+                return;
             }
 
-            // Success: Clean video confirmed, ads have cleared
+            // Clean video confirmed, ads have cleared
             lastProcessedVideoId = currentVideoId;
             isWaitingForUserSelection = true;
 
@@ -90,7 +93,7 @@ export default defineContentScript({
             if (adCheckInterval) {
                 clearInterval(adCheckInterval);
                 adCheckInterval = null;
-            }
+            } 
         }
 
         adCheckInterval = setInterval(() => {

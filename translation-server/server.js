@@ -1,12 +1,13 @@
 // server/server.js
 
+// Suppress ONNX runtime warning logs and noisy stdout messages
 const originalLog = console.log;
 const originalWarn = console.warn;
 
 console.log = (...args) => {
     const msg = args.join(' ');
     if (msg.includes('onnxruntime') || msg.includes('CleanUnusedInitializers') || msg.includes('MarianTokenizer')) {
-        return;
+        return; // Skip unwanted warning prints
     }
     originalLog(...args);
 };
@@ -14,13 +15,14 @@ console.log = (...args) => {
 console.warn = (...args) => {
     const msg = args.join(' ');
     if (msg.includes('onnxruntime') || msg.includes('MarianTokenizer')) {
-        return;
+        return; // Skip unwanted warning prints
     }
     originalWarn(...args);
 };
 
 import express from 'express';
 import cors from 'cors';
+import { pipeline } from '@xenova/transformers';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,38 +30,55 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+const translators = {};
+
+async function getTranslator(sourceLang, targetLang) {
+    const key = `${sourceLang}-${targetLang}`;
+    if (translators[key]) return translators[key];
+
+    let modelName = 'Xenova/opus-mt-en-de';
+    if (sourceLang === 'de' && targetLang === 'en') {
+        modelName = 'Xenova/opus-mt-de-en';
+    }
+
+    console.log(`Loading translation model for ${key} (${modelName})...`);
+    translators[key] = await pipeline('translation', modelName);
+    console.log(`Model ${key} loaded successfully.`);
+    return translators[key];
+}
 
 app.post('/translate', async (req, res) => {
     try {
         const { text, texts, sourceLang = 'en', targetLang = 'de' } = req.body;
-        const inputs = Array.isArray(texts) ? texts : [text];
+        const input = texts || text;
+        console.log(Date.now(),{"Input":input})
 
-        if (!inputs[0]) {
-            return res.status(400).json({ error: 'Missing input text.' });
+        if (!input) {
+            return res.status(400).json({ error: 'Missing input text or texts array.' });
         }
 
-        // Translates via public instance with 0 MB model overhead
-        const translations = await Promise.all(
-            inputs.map(async (str) => {
-                const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(str)}`;
-                const response = await fetch(url);
-                const data = await response.json();
-                return data.translation;
-            })
-        );
+        const model = await getTranslator(sourceLang, targetLang);
+        
+        const result = await model(input, { 
+            src_lang: sourceLang, 
+            tgt_lang: targetLang,
+            num_beams: 1 
+        });
 
-        if (Array.isArray(texts)) {
-            return res.json({ translations });
+         if (Array.isArray(input)) {
+            console.log(Date.now(),{ translations: result.map(r => r.translation_text) })
+            return res.json({ translations: result.map(r => r.translation_text) });
         } else {
-            return res.json({ translation: translations[0] });
+            console.log(Date.now(),{ translation: result[0].translation_text })
+            return res.json({ translation: result[0].translation_text });
         }
-    } catch (err) {
-        console.error('Translation error:', err);
+
+    } catch (error) {
+        console.error('Translation error:', error);
         return res.status(500).json({ error: 'Internal server error.' });
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on port ${PORT}`);
+app.listen(PORT, () => {
+    console.log(`Server listening on http://localhost:${PORT}`);
 });
