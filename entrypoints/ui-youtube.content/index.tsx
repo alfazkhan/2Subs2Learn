@@ -1,11 +1,10 @@
-// entrypoints/youtube-ui.content.ts
+// entrypoints/ui-youtube.content/index.tsx
 import ReactDOM from 'react-dom/client';
 import React from 'react';
-import subtitleSelection from './youtube.content/subtitleSelection';
+import subtitleSelection from '@/entrypoints/youtube.content/subtitleSelection';
 import SubtitleOverlay from '@/components/SubtitleOverlay';
-import type { ParsedCue } from '@/types/youtubeTypes';
-import { storage } from '#imports';
-import type { YouTubeCaptionTrack } from "@/types/youtubeTypes";
+import type { ParsedCue, YouTubeCaptionTrack } from '@/types/youtubeTypes';
+import { defineContentScript, storage } from '#imports';
 
 interface UnifiedCue {
     start: number;
@@ -15,14 +14,54 @@ interface UnifiedCue {
 }
 
 export default defineContentScript({
-    matches: ['*://*.youtube.com/watch*'],
+    matches: ['*://*.youtube.com/*'],
 
     async main() {
         let overlayRoot: ReactDOM.Root | null = null;
         let requestRef: number | null = null;
         const OVERLAY_ID = '2subs-overlay-container';
 
-        // Helper function to thoroughly clean up old overlays and sync loops
+        let isExtensionPaused = await storage.getItem('local:isExtensionPaused') || false
+        console.log("YOUTUBE isExtensionPaused", isExtensionPaused)
+
+        // Sync platform state to YOUTUBE across session and local storage
+        const syncPlatformToYouTube = async () => {
+            await Promise.all([
+                storage.setItem('session:currentPlatform', 'YOUTUBE'),
+                storage.setItem('local:currentPlatform', 'YOUTUBE')
+            ]);
+        };
+
+        if (document.visibilityState === 'visible') {
+            await syncPlatformToYouTube();
+        }
+
+        // Condition 1: Bind native HTML5 video play event on YouTube to ensure platform switches immediately
+        const bindVideoPlayListener = () => {
+            const video = document.querySelector('video') as HTMLVideoElement;
+            if (video) {
+                video.addEventListener('play', () => {
+                    syncPlatformToYouTube();
+                });
+            }
+        };
+
+        bindVideoPlayListener();
+
+        // Condition 2: Update currentPlatform when user focuses or switches tabs to YouTube
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                syncPlatformToYouTube();
+                bindVideoPlayListener();
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            syncPlatformToYouTube();
+            bindVideoPlayListener();
+        });
+
+        // Clean up existing subtitle overlays and animation loops on navigation
         const cleanupExistingSubs = () => {
             if (requestRef) {
                 cancelAnimationFrame(requestRef);
@@ -38,12 +77,12 @@ export default defineContentScript({
             }
         };
 
-        // Listen for YouTube internal navigation events to wipe previous video's subs instantly
         document.addEventListener('yt-navigate-start', () => {
             cleanupExistingSubs();
+            syncPlatformToYouTube();
         });
 
-        // Merges source and target cues into a single cohesive timeline without destructive mutations
+        // Merge source and target subtitle tracks into a unified timeline array
         const createUnifiedCues = (sourceCues: ParsedCue[], targetCues: ParsedCue[]): UnifiedCue[] => {
             if (!sourceCues.length && !targetCues.length) return [];
             if (!sourceCues.length) {
@@ -70,29 +109,21 @@ export default defineContentScript({
                     }
                 }
 
-                let start = s.start;
-                let duration = s.duration;
-
-                // Unify time window if the translation is close temporally (within 6 seconds)
-                if (bestTarget && minDiff < 6000) {
-                    start = Math.min(s.start, bestTarget.start);
-                    const end = Math.max(s.start + s.duration, bestTarget.start + bestTarget.duration);
-                    duration = end - start;
-                }
+                // Cues are in seconds; match if centers are within 6 seconds
+                const isCloseMatch = Boolean(bestTarget && minDiff < 6);
 
                 return {
-                    start,
-                    duration,
+                    start: s.start,
+                    duration: s.duration,
                     sourceText: s.text,
-                    targetText: bestTarget && minDiff < 6000 ? bestTarget.text : ""
+                    targetText: isCloseMatch ? bestTarget.text : ""
                 };
             });
 
-            // Ensure chronological sorting for binary search reliability
             return unified.sort((a, b) => a.start - b.start);
         };
 
-        // Optimized binary search lookup on the unified timeline
+        // Binary search lookup for active subtitle cue at current video time
         const findActiveUnifiedCue = (cues: UnifiedCue[], time: number): UnifiedCue | null => {
             let left = 0;
             let right = cues.length - 1;
@@ -110,40 +141,32 @@ export default defineContentScript({
                 }
             }
 
-            // Fallback check for adjacent gaps
-            const fallbackIndex = cues.findIndex(cue => cue.start >= time);
-            if (fallbackIndex > 0) {
-                const prev = cues[fallbackIndex - 1];
-                if (time >= prev.start && time <= (prev.start + prev.duration)) {
-                    return prev;
-                }
-            }
-
             return null;
         };
 
         window.addEventListener('message', (event) => {
             if (event.source !== window || !event.data) return;
 
+
             if (event.data.type === 'AVAILABLE_TRACKS_READY') {
-                const tracks: [] = event.data.payload.availableTracks;
-                const currentVideoID = event.data.payload.currentVideoId;
-                const saveTracksToMemory = async () => {
-                    await storage.setItem('local:currentVideoID',currentVideoID)
+                if (isExtensionPaused) {
+                    window.postMessage({ type: 'PLAY_VIDEO' }, '*');
+                    return
+                }
+                const tracks: YouTubeCaptionTrack[] = event.data.payload.availableTracks;
+                const currentVideoID: string = event.data.payload.currentVideoId;
+
+                (async () => {
+                    await storage.setItem('local:currentVideoID', currentVideoID);
                     const captionTracks = await storage.getItem<[string, YouTubeCaptionTrack[]][]>('local:availableTracks');
-                    if (captionTracks) {
-                        const captionsMap = new Map(captionTracks || []);
-                        captionsMap.set(currentVideoID, tracks);
-                        await storage.setItem('local:availableTracks', Array.from(captionsMap.entries()));
-                    } else {
-                        await storage.setItem('local:availableTracks', [[currentVideoID, tracks]]);
-                    }
-                };
-                saveTracksToMemory();
-                if (tracks.length > 1) {
-                    if ((tracks[0] as any).kind !== 'asr') {
-                        subtitleSelection(tracks);
-                    }
+                    const captionsMap = new Map(captionTracks || []);
+                    captionsMap.set(currentVideoID, tracks);
+                    await storage.setItem('local:availableTracks', Array.from(captionsMap.entries()));
+                })();
+
+                const hasManualTracks = tracks.some(t => t.kind !== 'asr');
+                if (tracks.length > 0 && hasManualTracks) {
+                    subtitleSelection(tracks);
                 } else {
                     window.postMessage({ type: 'PLAY_VIDEO' }, '*');
                 }
@@ -156,8 +179,8 @@ export default defineContentScript({
                 if (!playerContainer) return;
 
                 cleanupExistingSubs();
+                bindVideoPlayListener();
 
-                // Create the unified, non-destructive timeline array
                 const unifiedCues = createUnifiedCues(sourceArray, targetArray);
 
                 const overlayContainer = document.createElement('div');
@@ -169,6 +192,7 @@ export default defineContentScript({
                 let lastSource = "";
                 let lastTarget = "";
 
+                // 60fps synchronization loop rendering YouTube dual subtitles
                 const syncEngine = () => {
                     if (videoElement) {
                         const currentTime = videoElement.currentTime;
@@ -193,6 +217,8 @@ export default defineContentScript({
                 };
 
                 requestRef = requestAnimationFrame(syncEngine);
+                // Condition 1: Update platform state to YouTube when initiating playback
+                syncPlatformToYouTube();
                 window.postMessage({ type: 'PLAY_VIDEO' }, '*');
             }
         });

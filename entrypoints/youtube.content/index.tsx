@@ -1,38 +1,37 @@
 // entrypoints/youtube.content/index.tsx
+import { defineContentScript } from '#imports';
 import fetchSubtitles from "./fetchSubtitles";
 import { handleSubtitleExtraction } from "./subtitleExtractor";
 
 export default defineContentScript({
-    matches: ['*://*.youtube.com/watch*'],
+    matches: ['*://*.youtube.com/*'],
     world: 'MAIN',
 
     async main() {
         let lastProcessedVideoId = "";
-        let isWaitingForUserSelection = false;
-        let adCheckInterval: NodeJS.Timeout | null = null;
+        let adCheckInterval: ReturnType<typeof setInterval> | null = null;
         let navigationTimestamp = Date.now();
-        async function setPlatform() {
-            await storage.setItem(`local:currentPlatform`, "YOUTUBE")
-        }
-        setPlatform()
+        
+
+        // Listen for commands from the ISOLATED world YouTube UI script
         window.addEventListener('message', (event) => {
             if (event.source !== window || !event.data) return;
 
             if (event.data.type === 'PLAY_VIDEO') {
-                isWaitingForUserSelection = false;
                 const video = document.querySelector('video') as HTMLVideoElement;
                 const player = document.getElementById('movie_player') as any;
-                if (video) video.play().catch(() => { });
+                if (video) video.play().catch(() => {});
                 if (player && typeof player.playVideo === 'function') player.playVideo();
             }
 
             if (event.data.type === 'START_INTERCEPT_SUBTITLES') {
-                console.log("EVENT: 'START_INTERCEPT_SUBTITLES'")
+                console.log("EVENT: 'START_INTERCEPT_SUBTITLES'");
                 const { sourceTrack, targetTrack, targetLang } = event.data.payload;
                 handleSubtitleExtraction(sourceTrack, targetTrack, targetLang);
             }
         });
 
+        // Verify that YouTube ads have finished and extract available caption tracks
         function checkAndProcessVideo() {
             const player = document.getElementById('movie_player') as any;
             const videoElement = document.querySelector('video') as HTMLVideoElement;
@@ -46,19 +45,18 @@ export default defineContentScript({
                 return;
             }
 
-            // Strictly check active player ad states (avoiding permanent DOM wrappers)
+            // Strictly check active player ad states
             const isAdShowing =
                 player.classList.contains('ad-showing') ||
                 player.classList.contains('ad-interrupting') ||
                 (typeof player.getVideoData === 'function' && player.getVideoData()?.isAd === true);
 
             if (isAdShowing) {
-                // An ad is actively playing, reset the timer to wait for it to finish
                 navigationTimestamp = Date.now();
                 return;
             }
 
-            // Give a short 1-second buffer window right after navigation for a delayed ad to register.
+            // Wait 1 second after navigation to allow delayed pre-roll ads to mount
             if (Date.now() - navigationTimestamp < 1000) {
                 return;
             }
@@ -67,9 +65,7 @@ export default defineContentScript({
                 return;
             }
 
-            // Clean video confirmed, ads have cleared
             lastProcessedVideoId = currentVideoId;
-            isWaitingForUserSelection = true;
 
             if (!videoElement.paused) {
                 videoElement.pause();
@@ -93,27 +89,23 @@ export default defineContentScript({
             if (adCheckInterval) {
                 clearInterval(adCheckInterval);
                 adCheckInterval = null;
-            } 
+            }
         }
 
-        adCheckInterval = setInterval(() => {
-            checkAndProcessVideo();
-        }, 200);
+        adCheckInterval = setInterval(checkAndProcessVideo, 200);
 
+        // Reset video detection when YouTube finishes an internal SPA navigation
         document.addEventListener('yt-navigate-finish', (event: any) => {
             const freshResponse = event.detail?.response?.playerResponse || event.detail?.pageData?.playerResponse;
             if (freshResponse) {
                 (window as any).ytInitialPlayerResponse = freshResponse;
             }
 
-            // Reset tracking parameters on new video load
             navigationTimestamp = Date.now();
-            lastProcessedVideoId = ""; // Allow re-processing if navigating back to a previous ID
+            lastProcessedVideoId = "";
 
             if (!adCheckInterval) {
-                adCheckInterval = setInterval(() => {
-                    checkAndProcessVideo();
-                }, 200);
+                adCheckInterval = setInterval(checkAndProcessVideo, 200);
             }
         });
     }

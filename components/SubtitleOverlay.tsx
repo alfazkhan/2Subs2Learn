@@ -11,6 +11,7 @@ interface SubtitleOverlayProps {
     isTranslatingChunk?: boolean;
 }
 
+// Renders the dual-subtitle overlay box and dynamically watches user style preferences
 export default function SubtitleOverlay({
     sourceText,
     targetText,
@@ -26,6 +27,7 @@ export default function SubtitleOverlay({
     const [windowWidth, setWindowWidth] = useState<number>(80);
     const [verticalPosition, setVerticalPosition] = useState<number>(8);
 
+    // Fetch initial display settings concurrently and subscribe to live changes via storage.watch
     useEffect(() => {
         async function fetchData() {
             const [
@@ -117,7 +119,7 @@ export default function SubtitleOverlay({
                             fontWeight: '600',
                             textShadow: '1px 1px 2px rgba(0,0,0,0.9)',
                             marginBottom: '4px',
-                            whiteSpace: 'pre-line'
+                            whiteSpace: '-moz-pre-wrap'
                         }}
                     >
                         {sourceText}
@@ -132,7 +134,7 @@ export default function SubtitleOverlay({
                             fontWeight: '400',
                             textShadow: '1px 1px 2px rgba(0,0,0,0.9)',
                             minHeight: '20px',
-                            whiteSpace: 'pre-line'
+                            whiteSpace: '-moz-pre-wrap'
                         }}
                     >
                         {isTranslatingChunk ? (

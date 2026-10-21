@@ -10,12 +10,13 @@ export default defineConfig({
   // outDir: 'releases',
   manifest: {
     name: '2Subs2Learn',
-    version: '0.0.4',
-    permissions: ['storage','unlimitedStorage'],
+    version: '0.0.5',
+    permissions: ['storage', 'unlimitedStorage'],
     host_permissions: [
       "https://www.youtube.com/*",
       "https://*.zdf.de/*",
-      "http://localhost:3000/*"
+      "http://localhost:3000/*",
+      "https://translate.theonlyalfaz.com/*"
     ]
   },
   zip: {

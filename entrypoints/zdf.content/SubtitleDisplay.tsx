@@ -18,31 +18,29 @@ interface UnifiedCue {
 }
 
 interface PlaybackControllers {
-    autoPlayVideo: () => Promise<void>;
-    autoPauseVideo: () => Promise<void>;
-    isExtensionPausing: () => boolean;
+    autoPlayVideo: () => Promise;
+    autoPauseVideo: () => Promise;
+    isExtensionPaused: () => boolean;
 }
 
 let overlayRoot: ReactDOM.Root | null = null;
 let requestRef: number | null = null;
 let styleElement: HTMLStyleElement | null = null;
-let activeMessageListener: ((message: any) => void) | null = null;
+let unwatchTranslationUpdates: (() => void) | null = null;
 
 const OVERLAY_ID = 'zdf-2subs-overlay';
 
+// Inject CSS rule to hide ZDF's native subtitle container while our custom dual overlay is active
 const injectNativeSubHideStyle = () => {
     if (!styleElement) {
         styleElement = document.createElement('style');
         styleElement.id = 'zdf-hide-native-subs';
-        styleElement.innerHTML = `
-            .zdfplayer-cue-inline {
-                display: none !important;
-            }
-        `;
+        styleElement.innerHTML = `.zdfplayer-cue-inline { display: none !important; }`;
         document.head.appendChild(styleElement);
     }
 };
 
+// Remove the native subtitle hiding CSS rule during teardown
 const removeNativeSubHideStyle = () => {
     if (styleElement) {
         styleElement.remove();
@@ -50,9 +48,11 @@ const removeNativeSubHideStyle = () => {
     }
 };
 
+// Ensure the React root container is mounted inside the ZDF video player element
 function ensureOverlayRoot(playerSelector: string = 'video'): ReactDOM.Root | null {
     const videoElement = document.querySelector(playerSelector) as HTMLVideoElement;
     if (!videoElement) return null;
+
 
     const playerContainer = videoElement.parentElement || document.body;
     let overlayContainer = document.getElementById(OVERLAY_ID);
@@ -67,9 +67,12 @@ function ensureOverlayRoot(playerSelector: string = 'video'): ReactDOM.Root | nu
     }
 
     return overlayRoot;
+
+
+
 }
 
-// Displays the DaisyUI spinner overlay while waiting for ZDF XML subtitles to be enabled/fetched
+// Render the full-box loading spinner only before XML subtitle cues are loaded
 export function showInitialLoadingOverlay(message: string = 'Fetching subtitles...', playerSelector: string = 'video') {
     const root = ensureOverlayRoot(playerSelector);
     if (root) {
@@ -85,14 +88,15 @@ export function showInitialLoadingOverlay(message: string = 'Fetching subtitles.
     }
 }
 
+// Clean up animation frames, unwatch storage listeners, and unmount the React overlay
 export function cleanupSubtitleDisplay() {
     if (requestRef) {
         cancelAnimationFrame(requestRef);
         requestRef = null;
     }
-    if (activeMessageListener) {
-        browser.runtime.onMessage.removeListener(activeMessageListener);
-        activeMessageListener = null;
+    if (unwatchTranslationUpdates) {
+        unwatchTranslationUpdates();
+        unwatchTranslationUpdates = null;
     }
     if (overlayRoot) {
         overlayRoot.unmount();
@@ -103,6 +107,7 @@ export function cleanupSubtitleDisplay() {
     removeNativeSubHideStyle();
 }
 
+// Main ZDF subtitle display and synchronization engine
 export async function handleSubtitleDisplayAndSync(
     originalCues: SubtitleCue[],
     videoId: string,
@@ -113,10 +118,11 @@ export async function handleSubtitleDisplayAndSync(
         cancelAnimationFrame(requestRef);
         requestRef = null;
     }
-    if (activeMessageListener) {
-        browser.runtime.onMessage.removeListener(activeMessageListener);
-        activeMessageListener = null;
+    if (unwatchTranslationUpdates) {
+        unwatchTranslationUpdates();
+        unwatchTranslationUpdates = null;
     }
+
 
     const videoElement = document.querySelector(playerSelector) as HTMLVideoElement;
     if (!videoElement) return;
@@ -136,6 +142,7 @@ export async function handleSubtitleDisplayAndSync(
     let userManuallyPaused = false;
     let lastReportedTime = -1;
 
+    // Pull cached translations for this videoId from local storage into our in-memory unifiedCues array
     const syncUnifiedCuesWithStorage = async () => {
         const storageKey = 'local:translationsCache';
         const cacheRoot: Record<string, Array<{ starttime: number; endtime: number; text: string }>> =
@@ -150,63 +157,76 @@ export async function handleSubtitleDisplayAndSync(
         }
     };
 
+    // Binary search for the active cue at currentTime (O(log N))
     const findActiveUnifiedCue = (cues: UnifiedCue[], currentTime: number): UnifiedCue | null => {
-        return cues.find(cue => currentTime >= cue.starttime && currentTime <= cue.endtime) || null;
+        let left = 0;
+        let right = cues.length - 1;
+
+        while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            const cue = cues[mid];
+            if (currentTime >= cue.starttime && currentTime <= cue.endtime) {
+                return cue;
+            } else if (currentTime < cue.starttime) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+        return null;
     };
 
+    // Find the current or next upcoming cue to verify if translations are ready at the playhead
     const findCurrentOrUpcomingCue = (cues: UnifiedCue[], currentTime: number): UnifiedCue | null => {
         return cues.find(cue => cue.endtime >= currentTime) || null;
     };
 
     await syncUnifiedCuesWithStorage();
 
-    // Check if the chunk for the current timestamp already exists in memory
+    // Check if the chunk for the initial timestamp already exists in cache
     const initialTargetCue = findCurrentOrUpcomingCue(unifiedCues, videoElement.currentTime);
     if (!initialTargetCue || initialTargetCue.targetText) {
         isWaitingForBatchTranslation = false;
-        await controllers.autoPlayVideo();
+        await storage.setItem('session:zdfvideoPlaying', true);
     } else {
         isWaitingForBatchTranslation = true;
-        await controllers.autoPauseVideo();
+        await storage.setItem('session:zdfvideoPlaying', false);
     }
 
+    // Distinguish manual user pause from extension auto-pause
     videoElement.onpause = () => {
-        if (!controllers.isExtensionPausing() && !isWaitingForBatchTranslation) {
+        if (!controllers.isExtensionPaused() && !isWaitingForBatchTranslation) {
             userManuallyPaused = true;
-            storage.setItem('local:zdfvideoPlaying', false);
-            browser.runtime.sendMessage({
-                type: 'USER_MANUAL_PAUSE',
-                isManualPause: true
-            }).catch(() => {});
+            storage.setItem('session:zdfManualPause', true);
+            storage.setItem('session:zdfvideoPlaying', false);
         }
     };
 
+    // Clear manual pause flag when user resumes playback
     videoElement.onplay = () => {
         userManuallyPaused = false;
-        storage.setItem('local:zdfvideoPlaying', true);
-        browser.runtime.sendMessage({
-            type: 'USER_MANUAL_PAUSE',
-            isManualPause: false
-        }).catch(() => {});
+        storage.setItem('session:zdfManualPause', false);
+        storage.setItem('session:zdfvideoPlaying', true);
     };
 
+    // Pause immediately when user drags the timeline scrubber to an uncached position (preserving userManuallyPaused state)
     videoElement.onseeking = () => {
-        userManuallyPaused = false;
         const targetCue = findCurrentOrUpcomingCue(unifiedCues, videoElement.currentTime);
         if (targetCue && !targetCue.targetText) {
             isWaitingForBatchTranslation = true;
-            controllers.autoPauseVideo();
+            storage.setItem('session:zdfvideoPlaying', false);
         }
     };
 
+    // Prioritize the seeked batch index via session storage and resume only if not manually paused
     videoElement.onseeked = async () => {
         const currentTime = videoElement.currentTime;
-        userManuallyPaused = false;
 
-        browser.runtime.sendMessage({
-            type: 'PRIORITIZE_SEEK_INDEX',
-            payload: { currentTime }
-        }).catch(() => {});
+        storage.setItem('session:zdfSeekTrigger', {
+            videoId,
+            currentTime,
+            timestamp: Date.now()
+        });
 
         await syncUnifiedCuesWithStorage();
         const targetCue = findCurrentOrUpcomingCue(unifiedCues, currentTime);
@@ -214,24 +234,26 @@ export async function handleSubtitleDisplayAndSync(
         if (!targetCue || targetCue.targetText) {
             isWaitingForBatchTranslation = false;
             console.log("Video Play Event");
-            await controllers.autoPlayVideo();
+            if (!userManuallyPaused) {
+                await storage.setItem('session:zdfvideoPlaying', true);
+            } else {
+                await storage.setItem('session:zdfvideoPlaying', false);
+            }
         } else {
             isWaitingForBatchTranslation = true;
             console.log("Video Pause Event");
-            await controllers.autoPauseVideo();
+            await storage.setItem('session:zdfvideoPlaying', false);
         }
     };
 
+    // 60fps synchronous render loop that keeps current subtitles visible even when video is paused
     const syncEngine = () => {
         if (videoElement) {
             const currentTime = videoElement.currentTime;
 
             if (Math.abs(currentTime - lastReportedTime) > 0.5) {
                 lastReportedTime = currentTime;
-                browser.runtime.sendMessage({
-                    type: 'UPDATE_CURRENT_TIME',
-                    currentTime
-                }).catch(() => {});
+                storage.setItem('session:zdfCurrentTime', currentTime);
             }
 
             const activeCue = findActiveUnifiedCue(unifiedCues, currentTime);
@@ -244,18 +266,22 @@ export async function handleSubtitleDisplayAndSync(
                     isWaitingForBatchTranslation = true;
                     if (!videoElement.paused) {
                         console.log(`[2Subs2Learn] Translation missing at ${currentTime.toFixed(2)}s. Forcing pause.`);
-                        controllers.autoPauseVideo();
+                        storage.setItem('session:zdfvideoPlaying', false);
                     }
                 } else {
                     if (isWaitingForBatchTranslation && videoElement.paused && !userManuallyPaused) {
                         isWaitingForBatchTranslation = false;
                         console.log("[2Subs2Learn] Translation arrived. Resuming video.");
-                        controllers.autoPlayVideo();
+                        storage.setItem('session:zdfvideoPlaying', true);
                     }
                 }
             }
 
-            const renderKey = `${currentSource}|${currentTarget}|${isWaitingForBatchTranslation}|${isTranslatingActiveCue}`;
+            // Only show the full-box 'Translating subtitles...' spinner if the extension auto-paused
+            // during a gap with no active cue AND the user did NOT manually pause the video
+            const showGapLoader = isWaitingForBatchTranslation && !userManuallyPaused && !activeCue;
+
+            const renderKey = `${currentSource}|${currentTarget}|${showGapLoader}|${isTranslatingActiveCue}`;
             if (renderKey !== lastRenderKey) {
                 lastRenderKey = renderKey;
 
@@ -263,7 +289,7 @@ export async function handleSubtitleDisplayAndSync(
                     React.createElement(SubtitleOverlay, {
                         sourceText: currentSource,
                         targetText: currentTarget,
-                        isFetchingSubtitles: isWaitingForBatchTranslation && !activeCue,
+                        isFetchingSubtitles: showGapLoader,
                         loadingMessage: 'Translating subtitles...',
                         isTranslatingChunk: isTranslatingActiveCue
                     })
@@ -275,18 +301,23 @@ export async function handleSubtitleDisplayAndSync(
 
     requestRef = requestAnimationFrame(syncEngine);
 
-    activeMessageListener = (message: any) => {
-        if (message.type === 'TRANSLATIONS_UPDATED' && message.videoId === videoId) {
-            syncUnifiedCuesWithStorage().then(() => {
-                const targetCue = findCurrentOrUpcomingCue(unifiedCues, videoElement.currentTime);
-                if (targetCue && targetCue.targetText && isWaitingForBatchTranslation && !userManuallyPaused) {
-                    isWaitingForBatchTranslation = false;
-                    console.log("[2Subs2Learn] Translations updated. Triggering play command.");
-                    controllers.autoPlayVideo();
-                }
-            });
+    // Watch session signal key for newly translated batches from background worker
+    unwatchTranslationUpdates = storage.watch<{ videoId: string; timestamp: number } | null>(
+        'session:zdfTranslationUpdated',
+        (updateSignal) => {
+            if (updateSignal && updateSignal.videoId === videoId) {
+                syncUnifiedCuesWithStorage().then(() => {
+                    const targetCue = findCurrentOrUpcomingCue(unifiedCues, videoElement.currentTime);
+                    if (targetCue && targetCue.targetText && isWaitingForBatchTranslation && !userManuallyPaused) {
+                        isWaitingForBatchTranslation = false;
+                        console.log("[2Subs2Learn] Translations updated. Triggering play command.");
+                        storage.setItem('session:zdfvideoPlaying', true);
+                    }
+                });
+            }
         }
-    };
+    );
 
-    browser.runtime.onMessage.addListener(activeMessageListener);
+
+
 }

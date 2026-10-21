@@ -2,7 +2,7 @@
   "name": "2Subs2Learn",
   "description": "Watch your favorite content with Multiple subtitles",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "scripts": {
     "dev": "wxt",

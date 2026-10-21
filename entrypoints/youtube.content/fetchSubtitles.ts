@@ -1,6 +1,7 @@
 // entrypoints/youtube.content/fetchSubtitles.ts
 import type { YouTubeCaptionTrack } from "@/types/youtubeTypes";
 
+// Extracts available caption tracks from YouTube's global player response object
 export default function fetchSubtitles(): YouTubeCaptionTrack[] {
     const playerResponse = (window as any).ytInitialPlayerResponse;
     const captionTracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;

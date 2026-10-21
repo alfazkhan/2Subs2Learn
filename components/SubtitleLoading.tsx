@@ -6,6 +6,7 @@ interface SubtitleLoadingProps {
     text?: string;
 }
 
+// Renders either a full-overlay loading spinner or a compact inline badge spinner
 export default function SubtitleLoading({ mode, text }: SubtitleLoadingProps) {
     return (
         <>

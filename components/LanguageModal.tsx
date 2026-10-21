@@ -1,5 +1,6 @@
 // components/LanguageModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { storage } from '#imports';
 import type { YouTubeCaptionTrack, TranslationPref } from '@/types/youtubeTypes';
 import { YOUTUBE_TRANSLATION_LANGUAGES } from '@/constants/youtubeLanguages';
 
@@ -9,27 +10,33 @@ interface LanguageModalProps {
 }
 
 export default function LanguageModal({ availableTranslations, onConfirm }: LanguageModalProps) {
-    // Filter source options to ONLY include human-curated manual subtitles (kind !== 'asr')
+    // Filter source options to only include human-curated manual subtitles (kind !== 'asr')
     const manualTracks = availableTranslations.filter(t => t.kind !== 'asr') || [];
 
     const defaultSource = manualTracks.length > 0 ? manualTracks[0].languageCode : 'en';
     const [sourceLang, setSourceLang] = useState<string>(defaultSource);
     const [targetLang, setTargetLang] = useState<string>('de');
-    const [isLoading, setIsLoading] = useState<boolean>(false)
+    const [isLoading, setIsLoading] = useState<boolean>(false);
 
-
-    React.useEffect(() => {
+    // Load previously saved language preferences from local storage on mount
+    useEffect(() => {
         async function fetchPref() {
-            const pref = await storage.getItem<TranslationPref>('local:translationPref')
-            console.log("USE EFFECT", pref)
-            setSourceLang(pref?.sourceLang)
-            setTargetLang(pref?.targetLang)
+            const pref = await storage.getItem<TranslationPref>('local:translationPref');
+            console.log("USE EFFECT", pref);
+            if (pref?.sourceLang && manualTracks.some(t => t.languageCode === pref.sourceLang)) {
+                setSourceLang(pref.sourceLang);
+            }
+            if (pref?.targetLang) {
+                setTargetLang(pref.targetLang);
+            }
         }
-        fetchPref()
-    }, [])
+        fetchPref();
+    }, []);
+
+    // Trigger subtitle extraction with selected languages
     const handleConfirm = () => {
         onConfirm(sourceLang, targetLang);
-        setIsLoading(true)
+        setIsLoading(true);
     };
 
     return (

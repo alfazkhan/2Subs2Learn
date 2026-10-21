@@ -1,4 +1,4 @@
-// entrypoints/zd.content/index.ts
+// entrypoints/zdf.content/index.ts
 import { defineContentScript, storage } from '#imports';
 import {
     handleSubtitleDisplayAndSync,
@@ -21,20 +21,27 @@ export default defineContentScript({
         let lastProcessedUrl = "";
         let currentVideoId = "";
         let subtitleToggleInterval: ReturnType<typeof setInterval> | null = null;
-        let isExtensionPausing = false;
+        let isExtensionPaused = (async () => await storage.getItem('local:isExtensionPaused'))() || false
+        console.log("ZDF isExtensionPaused", isExtensionPaused)
+        let areCuesInitialized = false;
+        let unwatchPlayStatus: (() => void) | null = null;
 
-        // Only operate on URLs starting with www.zdf.de/play
+        // Verify if the current URL is strictly under www.zdf.de/play
         const isZdfPlayRoute = (): boolean => {
             return window.location.hostname === 'www.zdf.de' && window.location.pathname.startsWith('/play');
         };
 
-        async function setPlatform() {
+        // Sync active platform identifier into both session and local storage
+        const syncPlatformToZdf = async () => {
             if (isZdfPlayRoute()) {
-                await storage.setItem(`local:currentPlatform`, "ZDF");
+                await Promise.all([
+                    storage.setItem('session:currentPlatform', 'ZDF'),
+                    storage.setItem('local:currentPlatform', 'ZDF'),
+                ]);
             }
-        }
-        setPlatform();
+        };
 
+        // Extract unique video identifier from the ZDF URL path
         const extractVideoId = (): string => {
             const path = window.location.pathname;
             const segments = path.split('/').filter(Boolean);
@@ -44,21 +51,23 @@ export default defineContentScript({
             return path.replace('.html', '');
         };
 
-        const autoPauseVideo = async () => {
+        // Pause the HTML5 video element; only show initial loader if XML cues are not yet loaded
+        const autoPauseVideo = async (showInitialLoader: boolean = false) => {
             if (!isZdfPlayRoute()) return;
-            isExtensionPausing = true;
-            await storage.setItem('local:zdfvideoPlaying', false);
+            isExtensionPaused = true;
 
             const attemptPause = () => {
                 const videoElement = document.querySelector('video') as HTMLVideoElement;
                 if (videoElement) {
                     if (!videoElement.paused) {
-                        isExtensionPausing = true;
+                        isExtensionPaused = true;
                         videoElement.pause();
                         console.log("[2Subs2Learn ZDF] Video auto-paused.");
                     }
-                    showInitialLoadingOverlay('Fetching subtitles...', 'video');
-                    setTimeout(() => { isExtensionPausing = false; }, 150);
+                    if (showInitialLoader && !areCuesInitialized) {
+                        showInitialLoadingOverlay('Fetching subtitles...', 'video');
+                    }
+                    setTimeout(() => { isExtensionPaused = false; }, 150);
                     return true;
                 }
                 return false;
@@ -74,17 +83,19 @@ export default defineContentScript({
             }
         };
 
+        // Play the HTML5 video element when translations for the current timestamp are ready
         const autoPlayVideo = async () => {
             if (!isZdfPlayRoute()) return;
-            isExtensionPausing = false;
-            await storage.setItem('local:zdfvideoPlaying', true);
+            isExtensionPaused = false;
+            // Condition 1: Video playback on ZDF ensures currentPlatform is updated to ZDF
+            await syncPlatformToZdf();
 
             const attemptPlay = () => {
                 const videoElement = document.querySelector('video') as HTMLVideoElement;
                 if (videoElement) {
                     if (videoElement.paused) {
-                        videoElement.play().catch(() => {});
-                        console.log("[2Subs2Learn ZDF] Video played");
+                        videoElement.play().catch(() => { });
+                        console.log("Video played");
                     }
                     return true;
                 }
@@ -101,6 +112,36 @@ export default defineContentScript({
             }
         };
 
+        // Condition 1: Listen to native video element play events on ZDF to update platform state immediately
+        const bindVideoPlayListener = () => {
+            const videoElement = document.querySelector('video') as HTMLVideoElement;
+            if (videoElement) {
+                videoElement.addEventListener('play', () => {
+                    syncPlatformToZdf();
+                });
+            }
+        };
+
+        // Register watcher for ZDF play/pause state with clean unwatch lifecycle
+        const bindPlayStatusWatcher = () => {
+            if (unwatchPlayStatus) {
+                unwatchPlayStatus();
+                unwatchPlayStatus = null;
+            }
+            unwatchPlayStatus = storage.watch<boolean>('session:zdfvideoPlaying', (newValue) => {
+                if (newValue === null || !isZdfPlayRoute()) return;
+                if (newValue) {
+                    console.log("Video Play Event");
+                    autoPlayVideo();
+                } else {
+                    console.log("Video Pause Event");
+                    autoPauseVideo(false);
+                }
+                console.log("Video is now ", newValue ? "Playing" : "Paused");
+            });
+        };
+
+        // Convert HH:MM:SS.mmm timestamp string into float seconds
         const parseTimeToSeconds = (timeStr: string): number => {
             if (!timeStr) return 0;
             const parts = timeStr.split(':');
@@ -108,6 +149,7 @@ export default defineContentScript({
             return (parseFloat(parts[0]) || 0) * 3600 + (parseFloat(parts[1]) || 0) * 60 + (parseFloat(parts[2]) || 0);
         };
 
+        // Parse ZDF EBU-TT-D XML subtitle file into SubtitleCues while strictly preserving <tt:br> line breaks
         const parseZdfXmlPayload = (xmlText: string): SubtitleCue[] => {
             if (!xmlText) return [];
             const parser = new DOMParser();
@@ -124,16 +166,17 @@ export default defineContentScript({
                     const startSec = parseTimeToSeconds(begin);
                     const endSec = parseTimeToSeconds(end);
                     const innerHtml = p.innerHTML;
-                    const cleanedText = innerHtml
+
+                    // Convert both <tt:br /> and <br /> to \n, then strip tags
+                    const textWithBreaks = innerHtml
                         .replace(/<tt:br\s*\/?>/gi, '\n')
                         .replace(/<br\s*\/?>/gi, '\n')
-                        .replace(/<\/?[^>]+(>|$)/g, "")
-                        .replace(/\s+/g, ' ')
-                        .trim();
+                        .replace(/<\/?[^>]+(>|$)/g, "");
 
-                    const finalMultiLineText = cleanedText
+                    // Normalize horizontal spaces only without stripping newlines
+                    const finalMultiLineText = textWithBreaks
                         .split('\n')
-                        .map(line => line.trim())
+                        .map(line => line.replace(/[^\S\r\n]+/g, ' ').trim())
                         .filter(Boolean)
                         .join('\n');
 
@@ -145,7 +188,7 @@ export default defineContentScript({
             return cues;
         };
 
-        // Persistent subtitle enabler: keeps trying until XML is captured
+        // Automatically open ZDF player language settings and select German subtitles until XML is captured
         const autoEnableZdfSubtitles = () => {
             if (subtitleToggleInterval) {
                 clearInterval(subtitleToggleInterval);
@@ -164,7 +207,6 @@ export default defineContentScript({
                     return;
                 }
 
-                // Check performance entries in case XML already loaded
                 const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
                 for (let i = entries.length - 1; i >= 0; i--) {
                     const url = entries[i].name;
@@ -183,10 +225,9 @@ export default defineContentScript({
                         const labels = Array.from(document.querySelectorAll('label'));
                         const spans = Array.from(document.querySelectorAll('span'));
 
-                        // If first click didn't trigger XML because Deutsch was already selected, toggle Off then Deutsch
                         if (attemptCount > 1 && lastProcessedUrl === "") {
                             const offOption = labels.find(lbl => lbl.textContent?.includes('Aus') || lbl.textContent?.includes('Ohne')) ||
-                                              spans.find(s => s.textContent?.trim() === 'Aus' || s.textContent?.trim() === 'Ohne');
+                                spans.find(s => s.textContent?.trim() === 'Aus' || s.textContent?.trim() === 'Ohne');
                             if (offOption) (offOption as HTMLElement).click();
                         }
 
@@ -216,6 +257,7 @@ export default defineContentScript({
             }, 20000);
         };
 
+        // Download and parse the ZDF XML subtitle stream, initialize UI sync, and dispatch task via storage
         const fetchAndProcessSubtitleUrl = async (url: string) => {
             if (!isZdfPlayRoute()) return;
             if (url === lastProcessedUrl) return;
@@ -235,8 +277,9 @@ export default defineContentScript({
 
                 const subtitleCues = parseZdfXmlPayload(xmlText);
                 currentVideoId = extractVideoId();
+                areCuesInitialized = true;
 
-                await autoPauseVideo();
+                await autoPauseVideo(false);
 
                 const videoElement = document.querySelector('video') as HTMLVideoElement;
                 const currentTime = videoElement ? videoElement.currentTime : 0;
@@ -247,25 +290,27 @@ export default defineContentScript({
                     'video',
                     {
                         autoPlayVideo,
-                        autoPauseVideo,
-                        isExtensionPausing: () => isExtensionPausing
+                        autoPauseVideo: () => autoPauseVideo(false),
+                        isExtensionPaused: () => isExtensionPaused
                     }
                 );
 
-                browser.runtime.sendMessage({
-                    type: 'START_BACKGROUND_TRANSLATION',
-                    payload: {
-                        videoId: currentVideoId,
-                        cues: subtitleCues,
-                        currentTime
-                    }
-                }).catch(() => {});
+                bindVideoPlayListener();
+
+                // Dispatch full subtitle cue array and current timestamp to background worker via session storage
+                await storage.setItem('session:zdfActiveTask', {
+                    videoId: currentVideoId,
+                    cues: subtitleCues,
+                    currentTime,
+                    timestamp: Date.now()
+                });
 
             } catch (err) {
                 console.error("[2Subs2Learn ZDF] Failed to fetch XML:", err);
             }
         };
 
+        // Check if a network resource entry matches ZDF's TTML XML subtitle stream
         const checkResourceEntry = (url: string) => {
             if (!isZdfPlayRoute()) return;
             if (url && url.includes('utstreaming.zdf.de/mtt/') && url.endsWith('.xml')) {
@@ -283,24 +328,29 @@ export default defineContentScript({
 
         observer.observe({ entryTypes: ['resource'] });
 
-        const startForCurrentPlayPage = () => {
+        // Initialize state and subtitle extraction for a newly loaded ZDF play route
+        const startForCurrentPlayPage = async () => {
             if (!isZdfPlayRoute()) {
                 cleanupSubtitleDisplay();
                 return;
             }
+            areCuesInitialized = false;
             currentVideoId = extractVideoId();
-            setPlatform();
+            await syncPlatformToZdf();
+            await storage.setItem('session:zdfvideoPlaying', false);
+            bindPlayStatusWatcher();
+            bindVideoPlayListener();
             performance.clearResourceTimings();
-            autoPauseVideo();
+            autoPauseVideo(true);
             autoEnableZdfSubtitles();
         };
 
-        // Only trigger SPA reset when the actual videoId on /play changes
+        // Detect SPA route changes on ZDF and cleanly tear down / re-initialize watchers
         const setupSpaNavigationDetector = () => {
             let lastTrackedVideoId = isZdfPlayRoute() ? extractVideoId() : "";
             let wasOnPlayRoute = isZdfPlayRoute();
 
-            const checkRouteChange = () => {
+            const checkRouteChange = async () => {
                 const nowOnPlayRoute = isZdfPlayRoute();
                 const newVideoId = nowOnPlayRoute ? extractVideoId() : "";
 
@@ -308,8 +358,13 @@ export default defineContentScript({
                     wasOnPlayRoute = false;
                     lastTrackedVideoId = "";
                     lastProcessedUrl = "";
+                    areCuesInitialized = false;
                     cleanupSubtitleDisplay();
-                    browser.runtime.sendMessage({ type: 'RESET_VIDEO_STATE' }).catch(() => {});
+                    if (unwatchPlayStatus) {
+                        unwatchPlayStatus();
+                        unwatchPlayStatus = null;
+                    }
+                    await storage.setItem('session:zdfActiveTask', null);
                     return;
                 }
 
@@ -318,17 +373,33 @@ export default defineContentScript({
                     lastTrackedVideoId = newVideoId;
                     console.log("[2Subs2Learn ZDF] SPA navigation detected. Resetting for new video...");
                     lastProcessedUrl = "";
+                    areCuesInitialized = false;
                     cleanupSubtitleDisplay();
-                    performance.clearResourceTimings();
-                    browser.runtime.sendMessage({ type: 'RESET_VIDEO_STATE' }).catch(() => {});
-                    autoPauseVideo();
-                    autoEnableZdfSubtitles();
+                    if (unwatchPlayStatus) {
+                        unwatchPlayStatus();
+                        unwatchPlayStatus = null;
+                    }
+                    await storage.setItem('session:zdfActiveTask', null);
+                    await startForCurrentPlayPage();
                 }
             };
 
             window.addEventListener('popstate', checkRouteChange);
             setInterval(checkRouteChange, 500);
         };
+
+        // Condition 2: Update currentPlatform when user switches tabs back to ZDF
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isZdfPlayRoute()) {
+                syncPlatformToZdf();
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            if (isZdfPlayRoute()) {
+                syncPlatformToZdf();
+            }
+        });
 
         setupSpaNavigationDetector();
 
@@ -338,17 +409,5 @@ export default defineContentScript({
             });
             startForCurrentPlayPage();
         }
-
-        browser.runtime.onMessage.addListener((message) => {
-            if (!isZdfPlayRoute()) return;
-            if (message.type === 'PLAY_VIDEO_ZDF') {
-                console.log("Video Play Event");
-                autoPlayVideo();
-            }
-            if (message.type === 'PAUSE_VIDEO_ZDF') {
-                console.log("Video Pause Event");
-                autoPauseVideo();
-            }
-        });
     }
 });

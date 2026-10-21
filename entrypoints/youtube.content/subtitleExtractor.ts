@@ -1,6 +1,7 @@
 // entrypoints/youtube.content/subtitleExtractor.ts
 import type { YouTubeCaptionTrack } from "@/types/youtubeTypes";
 
+// Temporarily hooks XHR and Fetch in the MAIN world to capture YouTube's signed timedtext URL
 export function triggerAndInterceptTimedtextUrl(): Promise<string> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -51,6 +52,7 @@ export function triggerAndInterceptTimedtextUrl(): Promise<string> {
     });
 }
 
+// Downloads and parses YouTube's json3 subtitle format into normalized cues
 export async function fetchParsedSubtitle(url: string) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -73,15 +75,19 @@ export async function fetchParsedSubtitle(url: string) {
         .filter((cue: any) => cue.text.length > 0);
 }
 
-export async function handleSubtitleExtraction(sourceTrack: YouTubeCaptionTrack, targetTrack?: YouTubeCaptionTrack, targetLangCode?: string) {
+// Fetches both primary and secondary subtitle tracks and relays them to the ISOLATED world
+export async function handleSubtitleExtraction(
+    sourceTrack: YouTubeCaptionTrack,
+    targetTrack?: YouTubeCaptionTrack,
+    targetLangCode?: string
+) {
     const player = document.getElementById('movie_player') as any;
     if (!player) return;
 
     try {
         console.log("Activating subtitle stream to capture request...");
         const interceptedUrl = await triggerAndInterceptTimedtextUrl();
-                console.log(sourceTrack,targetTrack)
-
+        console.log(sourceTrack, targetTrack);
 
         const sourceUrlObj = new URL(interceptedUrl, window.location.origin);
         sourceUrlObj.searchParams.set('fmt', 'json3');
@@ -112,23 +118,22 @@ export async function handleSubtitleExtraction(sourceTrack: YouTubeCaptionTrack,
             translatedUrlObj.searchParams.set('tlang', resolvedTargetLang);
             targetArray = await fetchParsedSubtitle(translatedUrlObj.toString());
         }
+
         console.log("FETCHED subtitles");
         if (typeof player.toggleSubtitles === 'function' && player.isSubtitlesOn()) {
             player.toggleSubtitles();
         }
-        
+
         window.postMessage({
             type: 'RELAY_SUBTITLES_TO_ISOLATED',
             payload: { sourceArray, targetArray }
         }, '*');
 
-
     } catch (error) {
         console.error("[MAIN] Subtitle interception pipeline failed:", error);
-        console.log("REMOVING POPUP FROM DOM DUE TO FAILURE")
-        window.postMessage({ type: 'REMOVE_LANGUAGE_POPUP' }, '*');
-    }finally{
-        console.log("Removing Popup")
+        console.log("REMOVING POPUP FROM DOM DUE TO FAILURE");
+    } finally {
+        console.log("Removing Popup");
         window.postMessage({ type: 'REMOVE_LANGUAGE_POPUP' }, '*');
     }
 }
