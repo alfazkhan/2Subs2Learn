@@ -15,6 +15,7 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@xenova/transformers": "^2.17.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

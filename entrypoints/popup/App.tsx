@@ -151,18 +151,18 @@ const RowItem: React.FC<{ children: React.ReactNode; onClick?: () => void }> = (
 
 const TranslateLanguageSelect: React.FC<{ value: string; setValue: React.Dispatch<React.SetStateAction<string>> }> = ({ value, setValue }) => (
   <div className="flex items-center gap-2 text-sm text-gray-400">
-    <button
+    {/* <button
       className="btn btn-sm bg-[#20222d] hover:bg-[#20222d] text-white border-none shadow-none outline-none focus:outline-none"
       onClick={() => setValue('English')}
     >
       {value}
-    </button>
-    <ul className="dropdown menu w-52 rounded-box bg-base-100 shadow-sm">
-      <li><a onClick={() => setValue('English')}>English</a></li>
-      <li><a onClick={() => setValue('German')}>German</a></li>
-      <li><a onClick={() => setValue('French')}>French</a></li>
-      {/* Add more languages as needed */}
-    </ul>
+    </button> */}
+    <select defaultValue={`${value}`} className="select select-warning text-white w-52 rounded-box bg-[#17171f] shadow-sm">
+      {/* <option disabled={true}>{value}</option> */}
+      <option><a onClick={() => setValue('English')}>English</a></option>
+      <option><a onClick={() => setValue('German')}>German</a></option>
+      <option><a onClick={() => setValue('French')}>French</a></option>
+    </select>
   </div>
 );
 

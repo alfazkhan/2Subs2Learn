@@ -26,6 +26,7 @@ export default function SubtitleOverlay({
     const [targetFontSize, setTargetFontSize] = useState<number>(16);
     const [windowWidth, setWindowWidth] = useState<number>(80);
     const [verticalPosition, setVerticalPosition] = useState<number>(8);
+    const [modelDownloading, setModelDownloading] = useState<boolean | number>(false)
 
     // Fetch initial display settings concurrently and subscribe to live changes via storage.watch
     useEffect(() => {
@@ -34,12 +35,14 @@ export default function SubtitleOverlay({
                 storedSourceFontSize,
                 storedTargetFontSize,
                 storedWindowWidth,
-                storedVerticalPosition
+                storedVerticalPosition,
+                modelDownloadProgress
             ] = await Promise.all([
                 storage.getItem<number>('local:sourceFontSize'),
                 storage.getItem<number>('local:targetFontSize'),
                 storage.getItem<number>('local:windowWidth'),
-                storage.getItem<number>('local:verticalPosition')
+                storage.getItem<number>('local:verticalPosition'),
+                storage.getItem<{ status: string, progress: number }>('session:modelDownloadProgress')
             ]);
 
             if (storedSourceFontSize !== null && storedSourceFontSize !== undefined) {
@@ -53,6 +56,9 @@ export default function SubtitleOverlay({
             }
             if (storedVerticalPosition !== null && storedVerticalPosition !== undefined) {
                 setVerticalPosition(storedVerticalPosition);
+            }
+            if (modelDownloadProgress !== null && modelDownloadProgress !== undefined) {
+                setModelDownloading(modelDownloadProgress?.progress);
             }
         }
 
@@ -72,6 +78,10 @@ export default function SubtitleOverlay({
             if (newCount !== null && newCount !== undefined) setVerticalPosition(newCount);
         });
 
+        const unwatchModelDownloading = storage.watch<{ status: string, progress: number }>('session:modelDownloadProgress', (newCount) => {
+            if (newCount !== null && newCount !== undefined) setModelDownloading(newCount?.progress);
+        });
+
         fetchData();
 
         return () => {
@@ -79,8 +89,45 @@ export default function SubtitleOverlay({
             unwatchSourceFontSize();
             unwatchWindowWidth();
             unwatchVerticalPosition();
+            unwatchModelDownloading();
         };
     }, []);
+
+    if (modelDownloading && typeof modelDownloading === 'number' && modelDownloading < 100) {
+        console.log(modelDownloading)
+        return <div
+            style={{
+                position: 'absolute',
+                bottom: `${verticalPosition}%`,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2147483647,
+                pointerEvents: 'none',
+                width: `${windowWidth}%`,
+                backgroundColor: 'rgba(12, 12, 12, 0.85)',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                minHeight: '80px',
+                opacity: isVisible ? 1 : 0,
+                transition: 'opacity 0.15s ease-in-out',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+            }}
+        >
+            <div className="card w-96 bg-base-100 card-xl shadow-sm">
+                <div className="card-body">
+                    <h2 className="card-title">Downloading Translation model</h2>
+                    <p>Downloading in progress</p>
+                    <div className="justify-end card-actions">
+                        <progress className="progress progress-warning w-56" value={modelDownloading} max="100"></progress>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
     return (
         <div
