@@ -1,6 +1,5 @@
 // entrypoints/ui-youtube.content/index.tsx
 import ReactDOM from 'react-dom/client';
-import React from 'react';
 import subtitleSelection from '@/entrypoints/youtube.content/subtitleSelection';
 import SubtitleOverlay from '@/components/SubtitleOverlay';
 import type { ParsedCue, YouTubeCaptionTrack } from '@/types/youtubeTypes';
@@ -16,9 +15,9 @@ interface UnifiedCue {
 export default defineContentScript({
     matches: ['*://*.youtube.com/*'],
 
-    async main() {
+        async main() {
         let overlayRoot: ReactDOM.Root | null = null;
-        let requestRef: number | null = null;
+        let currentSyncEngine: (() => void) | null = null;
         const OVERLAY_ID = '2subs-overlay-container';
 
         let isExtensionPaused = await storage.getItem('local:isExtensionPaused') || false
@@ -61,12 +60,14 @@ export default defineContentScript({
             bindVideoPlayListener();
         });
 
-        // Clean up existing subtitle overlays and animation loops on navigation
+        // Clean up existing subtitle overlays and event listeners on navigation
         const cleanupExistingSubs = () => {
-            if (requestRef) {
-                cancelAnimationFrame(requestRef);
-                requestRef = null;
+            const videoElement = document.querySelector('video') as HTMLVideoElement;
+            if (videoElement && currentSyncEngine) {
+                videoElement.removeEventListener('timeupdate', currentSyncEngine);
+                currentSyncEngine = null;
             }
+
             const existingOverlay = document.getElementById(OVERLAY_ID);
             if (existingOverlay) {
                 if (overlayRoot) {
@@ -82,45 +83,30 @@ export default defineContentScript({
             syncPlatformToYouTube();
         });
 
-        // Merge source and target subtitle tracks into a unified timeline array
+
+                // Merge source and target subtitle tracks into a unified timeline array
         const createUnifiedCues = (sourceCues: ParsedCue[], targetCues: ParsedCue[]): UnifiedCue[] => {
             if (!sourceCues.length && !targetCues.length) return [];
             if (!sourceCues.length) {
                 return targetCues.map(t => ({ start: t.start, duration: t.duration, sourceText: "", targetText: t.text }));
             }
-            if (!targetCues.length) {
-                return sourceCues.map(s => ({ start: s.start, duration: s.duration, sourceText: s.text, targetText: "" }));
-            }
-
-            const unified: UnifiedCue[] = sourceCues.map(s => {
-                const sMid = s.start + (s.duration / 2);
-
-                let bestTarget = targetCues[0];
-                let minDiff = Math.abs((bestTarget.start + bestTarget.duration / 2) - sMid);
-
-                for (let j = 1; j < targetCues.length; j++) {
-                    const t = targetCues[j];
-                    const tMid = t.start + (t.duration / 2);
-                    const diff = Math.abs(tMid - sMid);
-
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        bestTarget = t;
-                    }
-                }
-
-                // Cues are in seconds; match if centers are within 6 seconds
-                const isCloseMatch = Boolean(bestTarget && minDiff < 6);
+            
+            return sourceCues.map(s => {
+                const sEnd = s.start + s.duration;
+                
+                // Find a target cue that overlaps with the source cue
+                const bestTarget = targetCues.find(t => {
+                    const tEnd = t.start + t.duration;
+                    return Math.max(s.start, t.start) < Math.min(sEnd, tEnd);
+                });
 
                 return {
                     start: s.start,
                     duration: s.duration,
                     sourceText: s.text,
-                    targetText: isCloseMatch ? bestTarget.text : ""
+                    targetText: bestTarget ? bestTarget.text : ""
                 };
             });
-
-            return unified.sort((a, b) => a.start - b.start);
         };
 
         // Binary search lookup for active subtitle cue at current video time
@@ -147,6 +133,10 @@ export default defineContentScript({
         window.addEventListener('message', (event) => {
             if (event.source !== window || !event.data) return;
 
+            if(event.data.type === 'RELOAD_PAGE'){
+                window.location.reload()
+            }
+
 
             if (event.data.type === 'AVAILABLE_TRACKS_READY') {
                 if (isExtensionPaused) {
@@ -172,7 +162,7 @@ export default defineContentScript({
                 }
             }
 
-            if (event.data.type === 'RELAY_SUBTITLES_TO_ISOLATED') {
+                                                if (event.data.type === 'RELAY_SUBTITLES_TO_ISOLATED') {
                 const { sourceArray, targetArray } = event.data.payload;
 
                 const playerContainer = document.querySelector('.html5-video-player');
@@ -192,8 +182,8 @@ export default defineContentScript({
                 let lastSource = "";
                 let lastTarget = "";
 
-                // 60fps synchronization loop rendering YouTube dual subtitles
-                const syncEngine = () => {
+                // Efficiently update subtitles based on video time changes
+                currentSyncEngine = () => {
                     if (videoElement) {
                         const currentTime = videoElement.currentTime;
                         const activeCue = findActiveUnifiedCue(unifiedCues, currentTime);
@@ -205,18 +195,18 @@ export default defineContentScript({
                             lastSource = currentSource;
                             lastTarget = currentTarget;
 
-                            overlayRoot?.render(
-                                React.createElement(SubtitleOverlay, {
-                                    sourceText: currentSource,
-                                    targetText: currentTarget
-                                })
+                                                        overlayRoot?.render(
+                                <SubtitleOverlay
+                                    sourceText={currentSource}
+                                    targetText={currentTarget}
+                                />
                             );
                         }
                     }
-                    requestRef = requestAnimationFrame(syncEngine);
                 };
 
-                requestRef = requestAnimationFrame(syncEngine);
+                videoElement.addEventListener('timeupdate', currentSyncEngine);
+                
                 // Condition 1: Update platform state to YouTube when initiating playback
                 syncPlatformToYouTube();
                 window.postMessage({ type: 'PLAY_VIDEO' }, '*');

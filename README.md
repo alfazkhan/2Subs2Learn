@@ -44,10 +44,9 @@
 
 *<!-- Add logos for YouTube and ZDF here or leave space to connect media files later -->*
 
-<p>
-
-<img  src="./assets/YT.png"  alt="YouTube Logo"  width="auto"  height="50"  /> &nbsp;&nbsp;&nbsp;&nbsp; <img  src="./assets/ZDF.png"  alt="ZDF Logo"  width="auto"  height="50"  />
-</p>
+<div style="object-align: center">
+<img  src="./assets/YT.png"  alt="YouTube Logo"  width="auto"  height="50"  /> &nbsp;&nbsp;&nbsp;&nbsp; <img  src="./assets/ZDF.png"  alt="ZDF Logo"  width="100"  height="auto"  />
+</div>
 
   
 
