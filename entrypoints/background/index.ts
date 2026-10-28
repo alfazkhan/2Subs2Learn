@@ -1,4 +1,4 @@
-// entrypoints/background.ts
+// entrypoints/background/index.ts
 import { defineBackground, storage } from '#imports';
 
 const prefetch_request_chunks = 3;
@@ -24,37 +24,46 @@ function getFormattedTime(date = new Date()): string {
   return `${hours}:${minutes}:${seconds}:${ms}`;
 }
 
-async function unlockSessionStorageForContentScripts() {
-  try {
-    if (browser.storage?.session?.setAccessLevel) {
-      await browser.storage.session.setAccessLevel({
-        accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS'
-      });
-    }
-  } catch (error) {
-    console.error(`[${getFormattedTime()}] Failed to set session storage access level:`, error);
-  }
-}
-
-async function ensureOffscreenDocument() {
+// Universal Inference Context Mounter (Chrome Offscreen OR Firefox Iframe)
+async function ensureInferenceContext() {
   const offscreenUrl = browser.runtime.getURL('/offscreen.html');
 
-  if ('offscreen' in chrome && typeof chrome.offscreen?.hasDocument === 'function') {
-    const hasDoc = await chrome.offscreen.hasDocument();
-    if (hasDoc) return;
+  // 1. Chromium Path: Use chrome.offscreen API
+  const chromeApi = (globalThis as any).chrome;
+  if (chromeApi?.offscreen?.createDocument) {
+    if (typeof chromeApi.offscreen.hasDocument === 'function') {
+      const hasDoc = await chromeApi.offscreen.hasDocument();
+      if (hasDoc) return;
+    }
+    try {
+      await chromeApi.offscreen.createDocument({
+        url: offscreenUrl,
+        reasons: ['WORKERS'],
+        justification: 'Run client-side machine learning inference for subtitle translation'
+      });
+      console.log(`[${getFormattedTime()}] [Background] Chromium Offscreen document mounted.`);
+      return;
+    } catch (error: any) {
+      if (!error.message?.includes('Only a single offscreen document may be created')) {
+        console.error(`[${getFormattedTime()}] [Background] Offscreen error:`, error);
+        throw error;
+      }
+      return;
+    }
   }
 
-  try {
-    await chrome.offscreen.createDocument({
-      url: offscreenUrl,
-      reasons: ['WORKERS' as any],
-      justification: 'Run client-side machine learning inference for subtitle translation'
-    });
-    console.log(`[${getFormattedTime()}] [Background] Offscreen document mounted at /offscreen.html`);
-  } catch (error: any) {
-    if (!error.message?.includes('Only a single offscreen document may be created')) {
-      console.error(`[${getFormattedTime()}] [Background] Error creating offscreen document:`, error);
-      throw error;
+  // 2. Firefox Path: Background scripts have full DOM access. Mount offscreen UI in a hidden iframe.
+  if (typeof document !== 'undefined') {
+    let iframe = document.getElementById('inference-frame') as HTMLIFrameElement;
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'inference-frame';
+      iframe.src = offscreenUrl;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+      console.log(`[${getFormattedTime()}] [Background] Firefox inference iframe mounted.`);
+      // Allow the iframe time to load the script and register its runtime.onMessage listener
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 }
@@ -64,7 +73,7 @@ async function initChromeNativeTranslation(sourceLang = 'de', targetLang = 'en')
   isCheckingNativeEngine = true;
 
   try {
-    const translationApi = (self as any).translation || (self as any).ai?.translator;
+    const translationApi = (globalThis as any).translation || (globalThis as any).ai?.translator;
     if (translationApi && typeof translationApi.canTranslate === 'function') {
       const canTranslate = await translationApi.canTranslate({
         sourceLanguage: sourceLang,
@@ -90,6 +99,13 @@ async function requestTranslations(
   sourceLang = 'de',
   targetLang = 'en'
 ): Promise<string[]> {
+  const options = {
+    max_new_tokens: 50,
+    repetition_penalty: 1.2,
+    no_repeat_ngram_size: 3
+  };
+
+  // Fast path: Built-in Chrome AI
   if (chromeNativeTranslator) {
     return await Promise.all(
       texts.map(async (text) => {
@@ -104,25 +120,17 @@ async function requestTranslations(
     );
   }
 
-  await ensureOffscreenDocument();
+  // Universal Offscreen/Iframe engine path
+  await ensureInferenceContext();
 
   const response = await browser.runtime.sendMessage({
     target: 'offscreen',
     type: 'TRANSLATE_BATCH',
-    payload: {
-      texts,
-      sourceLang,
-      targetLang,
-      options: {
-        max_new_tokens: 50,
-        repetition_penalty: 1.2,
-        no_repeat_ngram_size: 3
-      }
-    }
+    payload: { texts, sourceLang, targetLang, options }
   });
 
   if (!response?.success) {
-    throw new Error(response?.error || 'Offscreen translation pipeline failure');
+    throw new Error(response?.error || 'Inference engine response error');
   }
 
   return response.translations;
@@ -151,10 +159,7 @@ async function updatePlatformFromTab(tabId?: number) {
 
       if (detectedPlatform && detectedPlatform !== currentPlatform) {
         currentPlatform = detectedPlatform;
-        await Promise.all([
-          storage.setItem('session:currentPlatform', detectedPlatform),
-          storage.setItem('local:currentPlatform', detectedPlatform)
-        ]);
+        await storage.setItem('local:currentPlatform', detectedPlatform);
 
         if (detectedPlatform !== 'ZDF') {
           currentRunId++;
@@ -181,13 +186,13 @@ function getBatchIndexForTime(
 async function triggerZdfPlayState() {
   if (currentPlatform !== 'ZDF') return;
   try {
-    await storage.setItem<boolean>('session:zdfvideoPlaying', true);
+    await storage.setItem<boolean>('local:zdfvideoPlaying', true);
   } catch (error) {}
 }
 
 async function notifyZdfTranslationsUpdated(videoId: string) {
   try {
-    await storage.setItem('session:zdfTranslationUpdated', {
+    await storage.setItem('local:zdfTranslationUpdated', {
       videoId,
       timestamp: Date.now()
     });
@@ -336,16 +341,15 @@ async function processAndStoreBatches(
 }
 
 export default defineBackground(() => {
-  unlockSessionStorageForContentScripts();
   updatePlatformFromTab();
   initChromeNativeTranslation('de', 'en');
 
-  ensureOffscreenDocument().catch(() => {});
+  // Pre-initialize inference on boot
+  ensureInferenceContext().catch(() => {});
 
-  // Listen for delegated progress messages from the offscreen document
   browser.runtime.onMessage.addListener((message) => {
     if (message?.target === 'background' && message.type === 'MODEL_DOWNLOAD_PROGRESS') {
-      storage.setItem('session:modelDownloadProgress', message.payload);
+      storage.setItem('local:modelDownloadProgress', message.payload);
     }
   });
 
@@ -355,25 +359,25 @@ export default defineBackground(() => {
     if (changeInfo.url) updatePlatformFromTab(tabId);
   });
 
-  storage.watch<string>('session:currentPlatform', (platform) => {
+  storage.watch<string>('local:currentPlatform', (platform) => {
     if (platform) {
       currentPlatform = platform;
       if (platform !== 'ZDF') cancelActiveLoop();
     }
   });
 
-  storage.watch<boolean>('session:zdfvideoPlaying', (isPlaying) => {
+  storage.watch<boolean>('local:zdfvideoPlaying', (isPlaying) => {
     if (isPlaying !== null) isVideoPaused = !isPlaying;
   });
 
-  storage.watch<boolean>('session:zdfManualPause', (isManualPause) => {
+  storage.watch<boolean>('local:zdfManualPause', (isManualPause) => {
     if (isManualPause !== null) {
       isUserManuallyPaused = isManualPause;
       if (isManualPause) isVideoPaused = true;
     }
   });
 
-  storage.watch<number>('session:zdfCurrentTime', (time) => {
+  storage.watch<number>('local:zdfCurrentTime', (time) => {
     if (time !== null) currentPlaybackTime = time;
   });
 
@@ -382,7 +386,7 @@ export default defineBackground(() => {
     cues: { start: number; duration: number; text: string }[];
     currentTime: number;
     timestamp: number;
-  } | null>('session:zdfActiveTask', (task) => {
+  } | null>('local:zdfActiveTask', (task) => {
     if (!task || !task.videoId || !task.cues || task.cues.length === 0) {
       cancelActiveLoop();
       activeVideoId = '';
@@ -404,7 +408,7 @@ export default defineBackground(() => {
     videoId: string;
     currentTime: number;
     timestamp: number;
-  } | null>('session:zdfSeekTrigger', (seekData) => {
+  } | null>('local:zdfSeekTrigger', (seekData) => {
     if (!seekData) return;
     currentPlaybackTime = seekData.currentTime;
     isUserManuallyPaused = false;

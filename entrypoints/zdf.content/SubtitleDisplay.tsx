@@ -187,26 +187,26 @@ export async function handleSubtitleDisplayAndSync(
     const initialTargetCue = findCurrentOrUpcomingCue(unifiedCues, videoElement.currentTime);
     if (!initialTargetCue || initialTargetCue.targetText) {
         isWaitingForBatchTranslation = false;
-        await storage.setItem('session:zdfvideoPlaying', true);
+        await storage.setItem('local:zdfvideoPlaying', true);
     } else {
         isWaitingForBatchTranslation = true;
-        await storage.setItem('session:zdfvideoPlaying', false);
+        await storage.setItem('local:zdfvideoPlaying', false);
     }
 
     // Distinguish manual user pause from extension auto-pause
     videoElement.onpause = () => {
         if (!controllers.isExtensionPaused() && !isWaitingForBatchTranslation) {
             userManuallyPaused = true;
-            storage.setItem('session:zdfManualPause', true);
-            storage.setItem('session:zdfvideoPlaying', false);
+            storage.setItem('local:zdfManualPause', true);
+            storage.setItem('local:zdfvideoPlaying', false);
         }
     };
 
     // Clear manual pause flag when user resumes playback
     videoElement.onplay = () => {
         userManuallyPaused = false;
-        storage.setItem('session:zdfManualPause', false);
-        storage.setItem('session:zdfvideoPlaying', true);
+        storage.setItem('local:zdfManualPause', false);
+        storage.setItem('local:zdfvideoPlaying', true);
     };
 
     // Pause immediately when user drags the timeline scrubber to an uncached position (preserving userManuallyPaused state)
@@ -214,7 +214,7 @@ export async function handleSubtitleDisplayAndSync(
         const targetCue = findCurrentOrUpcomingCue(unifiedCues, videoElement.currentTime);
         if (targetCue && !targetCue.targetText) {
             isWaitingForBatchTranslation = true;
-            storage.setItem('session:zdfvideoPlaying', false);
+            storage.setItem('local:zdfvideoPlaying', false);
         }
     };
 
@@ -222,7 +222,7 @@ export async function handleSubtitleDisplayAndSync(
     videoElement.onseeked = async () => {
         const currentTime = videoElement.currentTime;
 
-        storage.setItem('session:zdfSeekTrigger', {
+        storage.setItem('local:zdfSeekTrigger', {
             videoId,
             currentTime,
             timestamp: Date.now()
@@ -235,14 +235,14 @@ export async function handleSubtitleDisplayAndSync(
             isWaitingForBatchTranslation = false;
             console.log("Video Play Event");
             if (!userManuallyPaused) {
-                await storage.setItem('session:zdfvideoPlaying', true);
+                await storage.setItem('local:zdfvideoPlaying', true);
             } else {
-                await storage.setItem('session:zdfvideoPlaying', false);
+                await storage.setItem('local:zdfvideoPlaying', false);
             }
         } else {
             isWaitingForBatchTranslation = true;
             console.log("Video Pause Event");
-            await storage.setItem('session:zdfvideoPlaying', false);
+            await storage.setItem('local:zdfvideoPlaying', false);
         }
     };
 
@@ -253,7 +253,7 @@ export async function handleSubtitleDisplayAndSync(
 
             if (Math.abs(currentTime - lastReportedTime) > 0.5) {
                 lastReportedTime = currentTime;
-                storage.setItem('session:zdfCurrentTime', currentTime);
+                storage.setItem('local:zdfCurrentTime', currentTime);
             }
 
             const activeCue = findActiveUnifiedCue(unifiedCues, currentTime);
@@ -266,13 +266,13 @@ export async function handleSubtitleDisplayAndSync(
                     isWaitingForBatchTranslation = true;
                     if (!videoElement.paused) {
                         console.log(`[2Subs2Learn] Translation missing at ${currentTime.toFixed(2)}s. Forcing pause.`);
-                        storage.setItem('session:zdfvideoPlaying', false);
+                        storage.setItem('local:zdfvideoPlaying', false);
                     }
                 } else {
                     if (isWaitingForBatchTranslation && videoElement.paused && !userManuallyPaused) {
                         isWaitingForBatchTranslation = false;
                         console.log("[2Subs2Learn] Translation arrived. Resuming video.");
-                        storage.setItem('session:zdfvideoPlaying', true);
+                        storage.setItem('local:zdfvideoPlaying', true);
                     }
                 }
             }
@@ -303,7 +303,7 @@ export async function handleSubtitleDisplayAndSync(
 
     // Watch session signal key for newly translated batches from background worker
     unwatchTranslationUpdates = storage.watch<{ videoId: string; timestamp: number } | null>(
-        'session:zdfTranslationUpdated',
+        'local:zdfTranslationUpdated',
         (updateSignal) => {
             if (updateSignal && updateSignal.videoId === videoId) {
                 syncUnifiedCuesWithStorage().then(() => {
@@ -311,7 +311,7 @@ export async function handleSubtitleDisplayAndSync(
                     if (targetCue && targetCue.targetText && isWaitingForBatchTranslation && !userManuallyPaused) {
                         isWaitingForBatchTranslation = false;
                         console.log("[2Subs2Learn] Translations updated. Triggering play command.");
-                        storage.setItem('session:zdfvideoPlaying', true);
+                        storage.setItem('local:zdfvideoPlaying', true);
                     }
                 });
             }

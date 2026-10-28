@@ -35,7 +35,7 @@ export default defineContentScript({
         const syncPlatformToZdf = async () => {
             if (isZdfPlayRoute()) {
                 await Promise.all([
-                    storage.setItem('session:currentPlatform', 'ZDF'),
+                    storage.setItem('local:currentPlatform', 'ZDF'),
                     storage.setItem('local:currentPlatform', 'ZDF'),
                 ]);
             }
@@ -128,7 +128,7 @@ export default defineContentScript({
                 unwatchPlayStatus();
                 unwatchPlayStatus = null;
             }
-            unwatchPlayStatus = storage.watch<boolean>('session:zdfvideoPlaying', (newValue) => {
+            unwatchPlayStatus = storage.watch<boolean>('local:zdfvideoPlaying', (newValue) => {
                 if (newValue === null || !isZdfPlayRoute()) return;
                 if (newValue) {
                     console.log("Video Play Event");
@@ -298,7 +298,7 @@ export default defineContentScript({
                 bindVideoPlayListener();
 
                 // Dispatch full subtitle cue array and current timestamp to background worker via session storage
-                await storage.setItem('session:zdfActiveTask', {
+                await storage.setItem('local:zdfActiveTask', {
                     videoId: currentVideoId,
                     cues: subtitleCues,
                     currentTime,
@@ -337,7 +337,7 @@ export default defineContentScript({
             areCuesInitialized = false;
             currentVideoId = extractVideoId();
             await syncPlatformToZdf();
-            await storage.setItem('session:zdfvideoPlaying', false);
+            await storage.setItem('local:zdfvideoPlaying', false);
             bindPlayStatusWatcher();
             bindVideoPlayListener();
             performance.clearResourceTimings();
@@ -364,7 +364,7 @@ export default defineContentScript({
                         unwatchPlayStatus();
                         unwatchPlayStatus = null;
                     }
-                    await storage.setItem('session:zdfActiveTask', null);
+                    await storage.setItem('local:zdfActiveTask', null);
                     return;
                 }
 
@@ -379,7 +379,7 @@ export default defineContentScript({
                         unwatchPlayStatus();
                         unwatchPlayStatus = null;
                     }
-                    await storage.setItem('session:zdfActiveTask', null);
+                    await storage.setItem('local:zdfActiveTask', null);
                     await startForCurrentPlayPage();
                 }
             };

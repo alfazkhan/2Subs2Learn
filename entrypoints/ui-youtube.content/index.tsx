@@ -26,7 +26,7 @@ export default defineContentScript({
         // Sync platform state to YOUTUBE across session and local storage
         const syncPlatformToYouTube = async () => {
             await Promise.all([
-                storage.setItem('session:currentPlatform', 'YOUTUBE'),
+                storage.setItem('local:currentPlatform', 'YOUTUBE'),
                 storage.setItem('local:currentPlatform', 'YOUTUBE')
             ]);
         };

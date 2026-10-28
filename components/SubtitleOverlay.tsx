@@ -42,7 +42,7 @@ export default function SubtitleOverlay({
                 storage.getItem<number>('local:targetFontSize'),
                 storage.getItem<number>('local:windowWidth'),
                 storage.getItem<number>('local:verticalPosition'),
-                storage.getItem<{ status: string, progress: number }>('session:modelDownloadProgress')
+                storage.getItem<{ status: string, progress: number }>('local:modelDownloadProgress')
             ]);
 
             if (storedSourceFontSize !== null && storedSourceFontSize !== undefined) {
@@ -78,7 +78,7 @@ export default function SubtitleOverlay({
             if (newCount !== null && newCount !== undefined) setVerticalPosition(newCount);
         });
 
-        const unwatchModelDownloading = storage.watch<{ status: string, progress: number }>('session:modelDownloadProgress', (newCount) => {
+        const unwatchModelDownloading = storage.watch<{ status: string, progress: number }>('local:modelDownloadProgress', (newCount) => {
             if (newCount !== null && newCount !== undefined) setModelDownloading(newCount?.progress);
         });
 
