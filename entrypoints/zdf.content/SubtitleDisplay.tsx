@@ -18,8 +18,8 @@ interface UnifiedCue {
 }
 
 interface PlaybackControllers {
-    autoPlayVideo: () => Promise;
-    autoPauseVideo: () => Promise;
+    autoPlayVideo: () => Promise<void>;
+    autoPauseVideo: () => Promise<void>;
     isExtensionPaused: () => boolean;
 }
 
@@ -165,6 +165,9 @@ export async function handleSubtitleDisplayAndSync(
         while (left <= right) {
             const mid = Math.floor((left + right) / 2);
             const cue = cues[mid];
+            if (!cue) {
+                return null;
+            }
             if (currentTime >= cue.starttime && currentTime <= cue.endtime) {
                 return cue;
             } else if (currentTime < cue.starttime) {

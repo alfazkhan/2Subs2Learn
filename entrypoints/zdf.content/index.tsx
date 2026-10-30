@@ -21,7 +21,10 @@ export default defineContentScript({
         let lastProcessedUrl = "";
         let currentVideoId = "";
         let subtitleToggleInterval: ReturnType<typeof setInterval> | null = null;
-        let isExtensionPaused = (async () => await storage.getItem('local:isExtensionPaused'))() || false
+        let isExtensionPaused = false;
+        void storage.getItem('local:isExtensionPaused').then((value) => {
+            isExtensionPaused = Boolean(value);
+        });
         console.log("ZDF isExtensionPaused", isExtensionPaused)
         let areCuesInitialized = false;
         let unwatchPlayStatus: (() => void) | null = null;
@@ -46,7 +49,9 @@ export default defineContentScript({
             const path = window.location.pathname;
             const segments = path.split('/').filter(Boolean);
             if (segments.length >= 2) {
-                return `${segments[segments.length - 2]}/${segments[segments.length - 1].replace('.html', '')}`;
+                const secondLast = segments[segments.length - 2] ?? '';
+                const last = segments[segments.length - 1] ?? '';
+                return `${secondLast}/${last.replace('.html', '')}`;
             }
             return path.replace('.html', '');
         };
@@ -146,7 +151,8 @@ export default defineContentScript({
             if (!timeStr) return 0;
             const parts = timeStr.split(':');
             if (parts.length < 3) return 0;
-            return (parseFloat(parts[0]) || 0) * 3600 + (parseFloat(parts[1]) || 0) * 60 + (parseFloat(parts[2]) || 0);
+            const [hours = '0', minutes = '0', seconds = '0'] = parts;
+            return (parseFloat(hours) || 0) * 3600 + (parseFloat(minutes) || 0) * 60 + (parseFloat(seconds) || 0);
         };
 
         // Parse ZDF EBU-TT-D XML subtitle file into SubtitleCues while strictly preserving <tt:br> line breaks
@@ -158,7 +164,9 @@ export default defineContentScript({
             const cues: SubtitleCue[] = [];
 
             for (let i = 0; i < pElements.length; i++) {
-                const p = pElements[i];
+                const p = pElements.item(i);
+                if (!p) continue;
+
                 const begin = p.getAttribute("begin");
                 const end = p.getAttribute("end");
 
@@ -209,7 +217,9 @@ export default defineContentScript({
 
                 const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
                 for (let i = entries.length - 1; i >= 0; i--) {
-                    const url = entries[i].name;
+                    const entry = entries[i];
+                    if (!entry) continue;
+                    const url = entry.name;
                     if (url && url.includes('utstreaming.zdf.de/mtt/') && url.endsWith('.xml')) {
                         checkResourceEntry(url);
                         if (lastProcessedUrl !== "") return;

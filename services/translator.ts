@@ -39,7 +39,6 @@ export async function getTranslationPipeline(
     if (onProgress) await onProgress('initiating', 0);
 
     transformersPipeline = await pipeline('translation', modelName, {
-      device: 'webgpu', // Will gracefully fall back to WASM in Firefox
       progress_callback: async (info: any) => {
         if (info.status === 'progress' && info.total) {
           modelDownloadState[info.file] = { loaded: info.loaded, total: info.total };
@@ -47,8 +46,10 @@ export async function getTranslationPipeline(
           let totalBytes = 0;
           let loadedBytes = 0;
           for (const file in modelDownloadState) {
-            totalBytes += modelDownloadState[file].total;
-            loadedBytes += modelDownloadState[file].loaded;
+            const fileState = modelDownloadState[file];
+            if (!fileState) continue;
+            totalBytes += fileState.total;
+            loadedBytes += fileState.loaded;
           }
 
           const overallProgress =

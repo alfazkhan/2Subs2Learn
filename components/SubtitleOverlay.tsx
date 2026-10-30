@@ -94,39 +94,48 @@ export default function SubtitleOverlay({
     }, []);
 
     if (modelDownloading && typeof modelDownloading === 'number' && modelDownloading < 100) {
-        console.log(modelDownloading)
-        return <div
-            style={{
-                position: 'absolute',
-                bottom: `${verticalPosition}%`,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2147483647,
-                pointerEvents: 'none',
-                width: `${windowWidth}%`,
-                backgroundColor: 'rgba(12, 12, 12, 0.85)',
-                padding: '12px 24px',
-                borderRadius: '8px',
-                minHeight: '80px',
-                opacity: isVisible ? 1 : 0,
-                transition: 'opacity 0.15s ease-in-out',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-            }}
-        >
-            <div className="card w-96 bg-base-100 card-xl shadow-sm">
-                <div className="card-body">
-                    <h2 className="card-title">Downloading Translation model</h2>
-                    <p>Downloading in progress</p>
-                    <div className="justify-end card-actions">
-                        <progress className="progress progress-warning w-56" value={modelDownloading} max="100"></progress>
+        return (
+            <div
+                className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none"
+                style={{
+                    width: `${windowWidth}%`,
+                    opacity: isVisible ? 1 : 0,
+                    transition: 'opacity 0.2s ease-in-out',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)'
+                }}
+            >
+                <div className="card bg-base-100/95 card-xl shadow-lg backdrop-blur-sm overflow-hidden">
+                    <div className="card-body p-4">
+                        {/* Progress Bar */}
+                        <div className="progress w-full h-2 mb-3">
+                            <progress
+                                className="progress progress-primary progress-md"
+                                value={modelDownloading}
+                                max="100"
+                            />
+                        </div>
+
+                        {/* Download Info */}
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                                <h2 className="card-title text-base text-primary">Downloading Model</h2>
+                                <p className="text-sm text-base-content/70">In progress...</p>
+                            </div>
+                            
+                            {/* Spinner Indicator */}
+                            <div className="loading loading-spinner loading-sm text-primary opacity-50"></div>
+                        </div>
+
+                        {/* Download Speed Badge (optional enhancement) */}
+                        {modelDownloading > 20 && (
+                            <div className="badge badge-success badge-sm gap-1 mt-2">
+                                🌍 Translation Model v2.1
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
-        </div>
+        );
     }
 
     return (
@@ -159,6 +168,7 @@ export default function SubtitleOverlay({
                 <>
                     {/* Source Language - Supports multi-line breaks */}
                     <div
+                        data-subtitle-track="source"
                         style={{
                             color: '#F39C12',
                             fontSize: `${sourceFontSize}px`,
@@ -174,6 +184,7 @@ export default function SubtitleOverlay({
 
                     {/* Target Language - Supports multi-line breaks and inline chunk loading */}
                     <div
+                        data-subtitle-track="target"
                         style={{
                             color: '#F0F0F0',
                             fontSize: `${targetFontSize}px`,

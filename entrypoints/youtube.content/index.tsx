@@ -8,13 +8,34 @@ export default defineContentScript({
     world: 'MAIN',
 
     async main() {
+        const pageState = window as Window & {
+            __2subsYoutubeMainWorldState?: { dispose: () => void };
+        };
+        pageState.__2subsYoutubeMainWorldState?.dispose();
+
         let lastProcessedVideoId = "";
         let adCheckInterval: ReturnType<typeof setInterval> | null = null;
         let navigationTimestamp = Date.now();
-        
+        let isDisposed = false;
+
+        const dispose = () => {
+            if (isDisposed) return;
+            isDisposed = true;
+            if (adCheckInterval) {
+                clearInterval(adCheckInterval);
+                adCheckInterval = null;
+            }
+            window.removeEventListener('message', handlePageMessage);
+            document.removeEventListener('yt-navigate-finish', handleNavigateFinish);
+            if (pageState.__2subsYoutubeMainWorldState?.dispose === dispose) {
+                delete pageState.__2subsYoutubeMainWorldState;
+            }
+        };
+
+        pageState.__2subsYoutubeMainWorldState = { dispose };
 
         // Listen for commands from the ISOLATED world YouTube UI script
-        window.addEventListener('message', (event) => {
+        const handlePageMessage = (event: MessageEvent) => {
             if (event.source !== window || !event.data) return;
 
             if (event.data.type === 'PLAY_VIDEO') {
@@ -29,7 +50,8 @@ export default defineContentScript({
                 const { sourceTrack, targetTrack, targetLang } = event.data.payload;
                 handleSubtitleExtraction(sourceTrack, targetTrack, targetLang);
             }
-        });
+        };
+        window.addEventListener('message', handlePageMessage);
 
         // Verify that YouTube ads have finished and extract available caption tracks
         function checkAndProcessVideo() {
@@ -95,8 +117,9 @@ export default defineContentScript({
         adCheckInterval = setInterval(checkAndProcessVideo, 200);
 
         // Reset video detection when YouTube finishes an internal SPA navigation
-        document.addEventListener('yt-navigate-finish', (event: any) => {
-            const freshResponse = event.detail?.response?.playerResponse || event.detail?.pageData?.playerResponse;
+        const handleNavigateFinish = (event: Event) => {
+            const navigationEvent = event as CustomEvent;
+            const freshResponse = navigationEvent.detail?.response?.playerResponse || navigationEvent.detail?.pageData?.playerResponse;
             if (freshResponse) {
                 (window as any).ytInitialPlayerResponse = freshResponse;
             }
@@ -107,6 +130,7 @@ export default defineContentScript({
             if (!adCheckInterval) {
                 adCheckInterval = setInterval(checkAndProcessVideo, 200);
             }
-        });
+        };
+        document.addEventListener('yt-navigate-finish', handleNavigateFinish);
     }
 });

@@ -2,7 +2,13 @@
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": ["@types/chrome", "vitest/globals", "@testing-library/jest-dom", "node"]
   },
-  "types": ["@types/chrome"]
+  "exclude": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "node_modules",
+    ".output"
+  ]
 }

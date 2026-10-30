@@ -12,6 +12,28 @@ interface UnifiedCue {
     targetText: string;
 }
 
+export const createUnifiedCues = (sourceCues: ParsedCue[], targetCues: ParsedCue[]): UnifiedCue[] => {
+    if (!sourceCues.length && !targetCues.length) return [];
+    if (!sourceCues.length) {
+        return targetCues.map(t => ({ start: t.start, duration: t.duration, sourceText: '', targetText: t.text }));
+    }
+
+    return sourceCues.map((sourceCue) => {
+        const sourceEnd = sourceCue.start + sourceCue.duration;
+        const bestTarget = targetCues.find((targetCue) => {
+            const targetEnd = targetCue.start + targetCue.duration;
+            return Math.max(sourceCue.start, targetCue.start) <= Math.min(sourceEnd, targetEnd);
+        });
+
+        return {
+            start: sourceCue.start,
+            duration: sourceCue.duration,
+            sourceText: sourceCue.text,
+            targetText: bestTarget ? bestTarget.text : ''
+        };
+    });
+};
+
 export default defineContentScript({
     matches: ['*://*.youtube.com/*'],
 
@@ -83,32 +105,6 @@ export default defineContentScript({
             syncPlatformToYouTube();
         });
 
-
-                // Merge source and target subtitle tracks into a unified timeline array
-        const createUnifiedCues = (sourceCues: ParsedCue[], targetCues: ParsedCue[]): UnifiedCue[] => {
-            if (!sourceCues.length && !targetCues.length) return [];
-            if (!sourceCues.length) {
-                return targetCues.map(t => ({ start: t.start, duration: t.duration, sourceText: "", targetText: t.text }));
-            }
-            
-            return sourceCues.map(s => {
-                const sEnd = s.start + s.duration;
-                
-                // Find a target cue that overlaps with the source cue
-                const bestTarget = targetCues.find(t => {
-                    const tEnd = t.start + t.duration;
-                    return Math.max(s.start, t.start) < Math.min(sEnd, tEnd);
-                });
-
-                return {
-                    start: s.start,
-                    duration: s.duration,
-                    sourceText: s.text,
-                    targetText: bestTarget ? bestTarget.text : ""
-                };
-            });
-        };
-
         // Binary search lookup for active subtitle cue at current video time
         const findActiveUnifiedCue = (cues: UnifiedCue[], time: number): UnifiedCue | null => {
             let left = 0;
@@ -117,6 +113,10 @@ export default defineContentScript({
             while (left <= right) {
                 const mid = Math.floor((left + right) / 2);
                 const cue = cues[mid];
+
+                if (!cue) {
+                    return null;
+                }
 
                 if (time >= cue.start && time <= (cue.start + cue.duration)) {
                     return cue;

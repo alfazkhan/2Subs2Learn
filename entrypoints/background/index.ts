@@ -1,9 +1,21 @@
-// entrypoints/background/index.ts
+// entrypoints/background/index.ts - Orchestrator for background worker modules
 import { defineBackground, storage } from '#imports';
 
-const prefetch_request_chunks = 3;
-const max_background_request = 5;
+// Import orchestration utilities from helpers module
+import { getFormattedTime } from './helpers';
 
+// Import translation logic from engine module
+import {
+  ensureInferenceContext, 
+  initChromeNativeTranslation,
+  requestTranslations
+} from './translation-engine';
+
+// Configuration constants
+const prefetchRequestChunks = 3;
+const maxBackgroundRequest = 5;
+
+// State management (moved to module-level variables)
 let isVideoPaused = true;
 let isUserManuallyPaused = false;
 let currentPriorityBatchIndex = 0;
@@ -12,129 +24,6 @@ let activeVideoId = '';
 let currentPlaybackTime = 0;
 let currentPlatform = '';
 let currentRunId = 0;
-
-let chromeNativeTranslator: any = null;
-let isCheckingNativeEngine = false;
-
-function getFormattedTime(date = new Date()): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  const ms = String(date.getMilliseconds()).padStart(3, '0');
-  return `${hours}:${minutes}:${seconds}:${ms}`;
-}
-
-// Universal Inference Context Mounter (Chrome Offscreen OR Firefox Iframe)
-async function ensureInferenceContext() {
-  const offscreenUrl = browser.runtime.getURL('/offscreen.html');
-
-  // 1. Chromium Path: Use chrome.offscreen API
-  const chromeApi = (globalThis as any).chrome;
-  if (chromeApi?.offscreen?.createDocument) {
-    if (typeof chromeApi.offscreen.hasDocument === 'function') {
-      const hasDoc = await chromeApi.offscreen.hasDocument();
-      if (hasDoc) return;
-    }
-    try {
-      await chromeApi.offscreen.createDocument({
-        url: offscreenUrl,
-        reasons: ['WORKERS'],
-        justification: 'Run client-side machine learning inference for subtitle translation'
-      });
-      console.log(`[${getFormattedTime()}] [Background] Chromium Offscreen document mounted.`);
-      return;
-    } catch (error: any) {
-      if (!error.message?.includes('Only a single offscreen document may be created')) {
-        console.error(`[${getFormattedTime()}] [Background] Offscreen error:`, error);
-        throw error;
-      }
-      return;
-    }
-  }
-
-  // 2. Firefox Path: Background scripts have full DOM access. Mount offscreen UI in a hidden iframe.
-  if (typeof document !== 'undefined') {
-    let iframe = document.getElementById('inference-frame') as HTMLIFrameElement;
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = 'inference-frame';
-      iframe.src = offscreenUrl;
-      iframe.style.display = 'none';
-      document.body.appendChild(iframe);
-      console.log(`[${getFormattedTime()}] [Background] Firefox inference iframe mounted.`);
-      // Allow the iframe time to load the script and register its runtime.onMessage listener
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  }
-}
-
-async function initChromeNativeTranslation(sourceLang = 'de', targetLang = 'en') {
-  if (chromeNativeTranslator || isCheckingNativeEngine) return;
-  isCheckingNativeEngine = true;
-
-  try {
-    const translationApi = (globalThis as any).translation || (globalThis as any).ai?.translator;
-    if (translationApi && typeof translationApi.canTranslate === 'function') {
-      const canTranslate = await translationApi.canTranslate({
-        sourceLanguage: sourceLang,
-        targetLanguage: targetLang
-      });
-      if (canTranslate !== 'no') {
-        console.log(`[${getFormattedTime()}] Initializing Chrome Native Translation API...`);
-        chromeNativeTranslator = await translationApi.createTranslator({
-          sourceLanguage: sourceLang,
-          targetLanguage: targetLang
-        });
-      }
-    }
-  } catch (error) {
-    console.warn(`[${getFormattedTime()}] Chrome Native Translation unavailable:`, error);
-  } finally {
-    isCheckingNativeEngine = false;
-  }
-}
-
-async function requestTranslations(
-  texts: string[],
-  sourceLang = 'de',
-  targetLang = 'en'
-): Promise<string[]> {
-  const options = {
-    max_new_tokens: 50,
-    repetition_penalty: 1.2,
-    no_repeat_ngram_size: 3
-  };
-
-  // Fast path: Built-in Chrome AI
-  if (chromeNativeTranslator) {
-    return await Promise.all(
-      texts.map(async (text) => {
-        const trimmed = text.trim();
-        if (!trimmed) return '';
-        try {
-          return await chromeNativeTranslator.translate(trimmed);
-        } catch {
-          return trimmed;
-        }
-      })
-    );
-  }
-
-  // Universal Offscreen/Iframe engine path
-  await ensureInferenceContext();
-
-  const response = await browser.runtime.sendMessage({
-    target: 'offscreen',
-    type: 'TRANSLATE_BATCH',
-    payload: { texts, sourceLang, targetLang, options }
-  });
-
-  if (!response?.success) {
-    throw new Error(response?.error || 'Inference engine response error');
-  }
-
-  return response.translations;
-}
 
 async function updatePlatformFromTab(tabId?: number) {
   try {
@@ -180,7 +69,7 @@ function getBatchIndexForTime(
   if (!cues || cues.length === 0) return 0;
   const cueIndex = cues.findIndex((cue) => cue.start + cue.duration >= timeInSeconds);
   if (cueIndex === -1) return 0;
-  return Math.floor(cueIndex / prefetch_request_chunks);
+  return Math.floor(cueIndex / prefetchRequestChunks);
 }
 
 async function triggerZdfPlayState() {
@@ -227,22 +116,22 @@ async function processAndStoreBatches(
     }
 
     const batchIndex = currentPriorityBatchIndex;
-    const startIndex = batchIndex * prefetch_request_chunks;
+    const startIndex = batchIndex * prefetchRequestChunks;
 
     if (startIndex >= cues.length) {
       break;
     }
 
-    const batch = cues.slice(startIndex, startIndex + prefetch_request_chunks);
+    const batch = cues.slice(startIndex, startIndex + prefetchRequestChunks);
     const storedCuesForVideo = cacheRoot[videoId] || [];
 
     const uncachedCues = batch.filter(
-      (cue) => !storedCuesForVideo.some((stored) => Math.abs(stored.starttime - cue.start) < 0.1)
+      (cue: { start: number; duration: number; text: string }) => !storedCuesForVideo.some((stored) => Math.abs(stored.starttime - cue.start) < 0.1)
     );
 
     if (uncachedCues.length === 0) {
       const targetCue = activeCuesCache.find(
-        (cue) => cue.start + cue.duration >= currentPlaybackTime
+        (cue: { start: number; duration: number; text: string }) => cue.start + cue.duration >= currentPlaybackTime
       );
       if (targetCue && isVideoPaused && !isUserManuallyPaused) {
         const isTargetCached = storedCuesForVideo.some(
@@ -259,7 +148,7 @@ async function processAndStoreBatches(
     }
 
     if (isVideoPaused) {
-      if (batchesFetchedWhilePaused >= max_background_request) {
+      if (batchesFetchedWhilePaused >= maxBackgroundRequest) {
         while (
           isVideoPaused &&
           currentPriorityBatchIndex === batchIndex &&
@@ -275,7 +164,7 @@ async function processAndStoreBatches(
     }
 
     try {
-      const textsToTranslate = uncachedCues.map((c) => c.text);
+      const textsToTranslate: string[] = uncachedCues.map((c: { text: string }) => c.text);
       console.log(`\n[${getFormattedTime()}] --- TRANSLATION BATCH START ---`);
       console.log(`[${getFormattedTime()}] INPUT (${textsToTranslate.length} cues):`, textsToTranslate);
 
@@ -292,6 +181,7 @@ async function processAndStoreBatches(
 
         for (let j = 0; j < uncachedCues.length; j++) {
           const cue = uncachedCues[j];
+          if (!cue) continue;
           const translatedText = translations[j];
 
           const exists = cacheRoot[videoId].some(
@@ -301,7 +191,7 @@ async function processAndStoreBatches(
             cacheRoot[videoId].push({
               starttime: cue.start,
               endtime: cue.start + cue.duration,
-              text: translatedText
+              text: translatedText!
             });
           }
         }
@@ -318,7 +208,7 @@ async function processAndStoreBatches(
         await notifyZdfTranslationsUpdated(videoId);
 
         const targetCue = activeCuesCache.find(
-          (cue) => cue.start + cue.duration >= currentPlaybackTime
+          (cue: { start: number; duration: number; text: string }) => cue.start + cue.duration >= currentPlaybackTime
         );
         if (targetCue && isVideoPaused && !isUserManuallyPaused) {
           const isNowCached = cacheRoot[videoId].some(
@@ -344,9 +234,9 @@ export default defineBackground(() => {
   updatePlatformFromTab();
   initChromeNativeTranslation('de', 'en');
 
-  // Pre-initialize inference on boot
-  ensureInferenceContext().catch(() => {});
-
+  ensureInferenceContext(browser.runtime.getURL('/offscreen.html')).catch((error) => {
+    console.error('[Translation Engine] Failed to initialize inference context:', error);
+  });
   browser.runtime.onMessage.addListener((message) => {
     if (message?.target === 'background' && message.type === 'MODEL_DOWNLOAD_PROGRESS') {
       storage.setItem('local:modelDownloadProgress', message.payload);
