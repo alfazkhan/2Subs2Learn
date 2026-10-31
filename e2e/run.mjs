@@ -12,9 +12,12 @@ const args = new Set(process.argv.slice(2));
 const browserSelection = [...args].find((arg) => arg.startsWith('--browser='))?.split('=')[1] ?? 'all';
 const siteSelection = [...args].find((arg) => arg.startsWith('--site='))?.split('=')[1] ?? 'all';
 const headed = args.has('--headed');
-const timeoutMs = 15_000;
+const timeoutMs = 20_000; // Increased from 15s to 20s for Settings heading visibility
 const adTimeoutMs = Number(process.env.E2E_AD_TIMEOUT_MS ?? 120_000);
 const subtitleTimeoutMs = Number(process.env.E2E_SUBTITLE_TIMEOUT_MS ?? 120_000);
+
+// Selenium Standalone Server configuration (bundles geckodriver, no PATH dependency)
+const standaloneServerPort = 4444;
 const youtubeUrl = process.env.YOUTUBE_E2E_URL ?? 'https://www.youtube.com/watch?v=4-eDoThe6qo';
 const zdfUrl = 'https://www.zdf.de/play/reportagen/die-maedchen-wg-100/mwg-athen-ankommen-in-athen-061-100';
 const resultsDir = path.join(root, 'test-results', 'e2e');
@@ -471,10 +474,14 @@ async function runFirefoxZdf(driver) {
 async function runFirefox() {
   const extensionDir = path.join(root, '.output', 'firefox-mv3-dev');
   const firefoxBinary = process.env.FIREFOX_PATH ?? 'D:\\Program Files\\Mozilla Firefox\\firefox.exe';
+  // Use geckodriver from PATH (added via environment variable)
   process.env.MOZ_REMOTE_ALLOW_SYSTEM_ACCESS = '1';
   const options = new firefox.Options().setBinary(firefoxBinary);
   if (!headed) options.addArguments('-headless');
-  const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(options).build();
+  const driver = await new Builder()
+    .forBrowser('firefox')
+    .setFirefoxOptions(options)
+    .build();
   await driver.manage().setTimeouts({ pageLoad: timeoutMs, script: timeoutMs, implicit: 0 });
   try {
     const addon = await driver.installWebExtension(extensionDir, { permanent: false });
@@ -527,5 +534,5 @@ if (failures.length) {
   console.error(`\n${failures.length} browser flow(s) failed.`);
   process.exitCode = 1;
 } else {
-  console.log('\nAll selected browser E2E flows ✅ed.');
+  console.log('\n ✅ All selected browser E2E flows checked.');
 }

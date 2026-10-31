@@ -2,11 +2,21 @@ import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { storage as originalStorage } from './wxt-imports';
 
+// Extend globalThis types for testing
+declare global {
+  interface GlobalThis {
+    storage: {
+      getItem: (key: string) => Promise<string | null>;
+      setItem: (key: string, value: unknown) => Promise<void>;
+      watch: (key: string, listener: (value: string) => void) => (() => void) | undefined;
+    };
+  }
+}
+
 // Mock react-dom/client for React component rendering tests
 vi.mock('react-dom/client', async (importOriginal) => {
   const actual = await importOriginal();
   return {
-    ...actual,
     createRoot: vi.fn((container) => ({
       render: vi.fn(() => {}),
       unmount: vi.fn(),
@@ -20,14 +30,7 @@ const setItemSpy = vi.fn();
 const watchSpy = vi.fn();
 
 // Directly assign storage to globalThis so tests can access it via globalThis.storage.getItem
-globalThis.storage = {
-  getItem: getItemSpy,
-  setItem: setItemSpy,
-  watch: watchSpy,
-};
-
-// Ensure spies are also attached to the mocked storage object for vi.mocked to work
-const mockStorage = {
+(globalThis as any).storage = {
   getItem: getItemSpy,
   setItem: setItemSpy,
   watch: watchSpy,
@@ -76,7 +79,7 @@ export { mockTranslationEngine };
 
 // Mock chrome.offsendDocumentMessage if available
 if (typeof chrome !== 'undefined' && chrome.offscreen) {
-  chrome.offsendDocumentMessage = vi.fn();
+  (chrome as any).offsendDocumentMessage = vi.fn();
 }
 
 // Mock global functions
@@ -94,7 +97,7 @@ vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
     'local:modelDownloadProgress': JSON.stringify({ status: 'downloading', progress: 50 })
   };
 
-  return (mocks[key] ?? null) as string | null;
+  return mocks[key] ?? null;
 });
 
 vi.spyOn(Storage.prototype, 'setItem').mockImplementation((_key: string, _value: any) => {

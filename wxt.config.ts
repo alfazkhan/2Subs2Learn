@@ -23,11 +23,8 @@ export default defineConfig({
       host_permissions: [
         'https://www.youtube.com/*',
         'https://*.zdf.de/*',
-        'http://localhost:3000/*',
-        'https://translate.theonlyalfaz.com/*',
         '*://*.youtube.com/*',
         '*://www.zdf.de/*',
-        'http://localhost/*'
       ],
       content_security_policy: {
         extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"

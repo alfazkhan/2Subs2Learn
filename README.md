@@ -4,6 +4,14 @@
 
 An advanced, cross-browser extension designed for language learners on **YouTube** and **ZDF**. Powered by client-side neural machine translation via Hugging Face Transformers.js and ONNX Runtime Web.
 
+<p align="center">
+  <a href="https://addons.mozilla.org/en-US/firefox/addon/2subs2learn/" title="Get 2Subs2Learn for Firefox">
+    <img src="https://img.shields.io/badge/GET%20IT%20ON-FIREFOX%20ADD--ONS-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white" alt="Get 2Subs2Learn on Firefox Add-ons" />
+  </a>
+  &nbsp;&nbsp;
+  <img src="https://img.shields.io/badge/CHROME_WEB_STORE-APPROVAL_PENDING-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Chrome Web Store: approval pending" />
+</p>
+
 ---
 
 [![Version](https://img.shields.io/badge/version-0.0.5-blue.svg?style=flat-square)](https://github.com/alfazkhan/2Subs2Learn/releases)

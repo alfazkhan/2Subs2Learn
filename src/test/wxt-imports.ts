@@ -1,13 +1,18 @@
 // Mock storage that integrates with globalThis.storage for test compatibility
-let getItemValue: unknown | null = null;
-let setItemValue: unknown = undefined;
+let getItemValue: string | null = null;
+let setItemValue: string | undefined = undefined;
+
+// Type guard to check if we're in a test environment
+function isTestEnvironment(): boolean {
+  return (globalThis as any).storage !== undefined;
+}
 
 export const storage = {
-  getItem: async <T = unknown>(_key: string): Promise<T | null> => {
+  getItem: async (_key: string): Promise<string | null> => {
     // Check if we're in a test environment and use globalThis.storage value if available
-    if (typeof globalThis !== 'undefined' && globalThis.storage && globalThis.storage.getItem) {
+    if (isTestEnvironment() && (globalThis as any).storage.getItem) {
       try {
-        const result = await globalThis.storage.getItem(_key);
+        const result = await (globalThis as any).storage.getItem(_key);
         return result ?? null;
       } catch {
         // Fallback to mock behavior
@@ -16,11 +21,11 @@ export const storage = {
     }
     return getItemValue ?? null;
   },
-  setItem: async <T = unknown>(_key: string, _value: T): Promise<void> => {
+  setItem: async (_key: string, _value: string): Promise<void> => {
     // Check if we're in a test environment and use globalThis.storage value if available
-    if (typeof globalThis !== 'undefined' && globalThis.storage && globalThis.storage.setItem) {
+    if (isTestEnvironment() && (globalThis as any).storage.setItem) {
       try {
-        await globalThis.storage.setItem(_key, _value);
+        await (globalThis as any).storage.setItem(_key, _value);
         return;
       } catch {
         // Fallback to mock behavior
@@ -29,11 +34,11 @@ export const storage = {
     }
     setItemValue = _value;
   },
-  watch: <T = unknown>(_key: string, _listener: (value: T) => void): (() => void) | undefined => {
+  watch: (_key: string, _listener: (value: string) => void): (() => void) | undefined => {
     // Check if we're in a test environment and use globalThis.storage value if available
-    if (typeof globalThis !== 'undefined' && globalThis.storage && globalThis.storage.watch) {
+    if (isTestEnvironment() && (globalThis as any).storage.watch) {
       try {
-        const watcher = globalThis.storage.watch(_key, _listener);
+        const watcher = (globalThis as any).storage.watch(_key, _listener);
         return watcher;
       } catch {
         // Fallback to mock behavior
@@ -44,4 +49,4 @@ export const storage = {
   },
 };
 
-export const defineContentScript = <T>(value: T) => value;
+export const defineContentScript = (_value: string) => _value;
