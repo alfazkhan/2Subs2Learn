@@ -15,9 +15,7 @@ stats-*.json
 .wxt
 web-ext.config.ts
 CHANGELOGS
-src
-test
-e2e
+
 
 # Editor directories and files
 .vscode/*
@@ -29,4 +27,4 @@ e2e
 *.njsproj
 *.sln
 *.sw?
-vitest.config.ts
+

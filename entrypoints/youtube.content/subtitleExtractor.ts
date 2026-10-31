@@ -85,15 +85,11 @@ export async function handleSubtitleExtraction(
     if (!player) return;
 
     try {
-        const interceptedUrl = sourceTrack.baseUrl
-            ? undefined
-            : await triggerAndInterceptTimedtextUrl();
-        const sourceUrlObj = new URL(sourceTrack.baseUrl || interceptedUrl!, window.location.origin);
+        const interceptedUrl = await triggerAndInterceptTimedtextUrl();
+        const sourceUrlObj = new URL(interceptedUrl, window.location.origin);
         sourceUrlObj.searchParams.set('fmt', 'json3');
-        if (!sourceTrack.baseUrl) {
-            sourceUrlObj.searchParams.set('lang', sourceTrack.languageCode);
-            sourceUrlObj.searchParams.delete('tlang');
-        }
+        sourceUrlObj.searchParams.set('lang', sourceTrack.languageCode);
+        sourceUrlObj.searchParams.delete('tlang');
 
         const sourceArray = await fetchParsedSubtitle(sourceUrlObj.toString());
 
@@ -101,12 +97,10 @@ export async function handleSubtitleExtraction(
         const resolvedTargetLang = targetTrack?.languageCode || targetLangCode || 'de';
 
         if (targetTrack && targetTrack.kind !== 'asr') {
-            const targetUrlObj = new URL(targetTrack.baseUrl || sourceTrack.baseUrl || interceptedUrl!, window.location.origin);
+            const targetUrlObj = new URL(interceptedUrl, window.location.origin);
             targetUrlObj.searchParams.set('fmt', 'json3');
-            if (!targetTrack.baseUrl) {
-                targetUrlObj.searchParams.set('lang', resolvedTargetLang);
-                targetUrlObj.searchParams.delete('tlang');
-            }
+            targetUrlObj.searchParams.set('lang', resolvedTargetLang);
+            targetUrlObj.searchParams.delete('tlang');
 
             try {
                 targetArray = await fetchParsedSubtitle(targetUrlObj.toString());
@@ -116,9 +110,9 @@ export async function handleSubtitleExtraction(
         }
 
         if (!targetArray || targetArray.length === 0) {
-            const translatedUrlObj = new URL(sourceTrack.baseUrl || interceptedUrl!, window.location.origin);
+            const translatedUrlObj = new URL(interceptedUrl, window.location.origin);
             translatedUrlObj.searchParams.set('fmt', 'json3');
-            translatedUrlObj.searchParams.delete('lang');
+            translatedUrlObj.searchParams.set('lang', sourceTrack.languageCode);
             translatedUrlObj.searchParams.set('tlang', resolvedTargetLang);
             targetArray = await fetchParsedSubtitle(translatedUrlObj.toString());
         }
