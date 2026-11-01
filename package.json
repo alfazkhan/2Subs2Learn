@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "selenium-webdriver": "^4.51.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@types/chrome": "^0.3.6",
@@ -43,6 +42,8 @@
     "daisyui": "^5.7.46",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.28",
+    "selenium-standalone": "^10.0.2",
+    "selenium-webdriver": "^4.51.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.5",

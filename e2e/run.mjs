@@ -12,17 +12,44 @@ const args = new Set(process.argv.slice(2));
 const browserSelection = [...args].find((arg) => arg.startsWith('--browser='))?.split('=')[1] ?? 'all';
 const siteSelection = [...args].find((arg) => arg.startsWith('--site='))?.split('=')[1] ?? 'all';
 const headed = args.has('--headed');
-const timeoutMs = 20_000; // Increased from 15s to 20s for Settings heading visibility
+const timeoutMs = 30_000; // Increased from 15s to 30s for Settings heading visibility and Firefox compatibility
 const adTimeoutMs = Number(process.env.E2E_AD_TIMEOUT_MS ?? 120_000);
 const subtitleTimeoutMs = Number(process.env.E2E_SUBTITLE_TIMEOUT_MS ?? 120_000);
 
 // Selenium Standalone Server configuration (bundles geckodriver, no PATH dependency)
-const standaloneServerPort = 4444;
+const standaloneServerPort = 4445; // Changed from 4444 to avoid port conflicts
+
+// Start Selenium Standalone Server for Firefox E2E tests
+async function startSeleniumStandaloneServer() {
+  const { spawn } = await import('node:child_process');
+  // Use selenium-standalone with firefox latest to get proper Firefox driver
+  const server = spawn('npx', [
+    'selenium-standalone', 'start', 
+    '--firefox=latest', 
+    `--port=${standaloneServerPort}`,
+    '--chrome=latest'
+  ], {
+    shell: process.platform === 'win32' ? 'powershell.exe' : 'bash',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  server.stdout.on('data', (data) => process.stdout.write(data));
+  server.stderr.on('data', (data) => process.stderr.write(data));
+}
+
+// Start Selenium Standalone Server for Firefox E2E tests
+await startSeleniumStandaloneServer();
+
+// Wait 1 second to ensure Selenium Standalone Server is fully ready
+await new Promise((resolve) => setTimeout(resolve, 1000));
+
 const youtubeUrl = process.env.YOUTUBE_E2E_URL ?? 'https://www.youtube.com/watch?v=4-eDoThe6qo';
 const zdfUrl = 'https://www.zdf.de/play/reportagen/die-maedchen-wg-100/mwg-athen-ankommen-in-athen-061-100';
 const resultsDir = path.join(root, 'test-results', 'e2e');
 const servers = [];
 const failures = [];
+
+// Collect server info after initialization
+servers.push({ type: 'selenium-standalone', port: standaloneServerPort });
 
 if (!['all', 'chromium', 'firefox'].includes(browserSelection)) {
   throw new Error(`Unknown browser selection: ${browserSelection}`);
@@ -474,9 +501,9 @@ async function runFirefoxZdf(driver) {
 async function runFirefox() {
   const extensionDir = path.join(root, '.output', 'firefox-mv3-dev');
   const firefoxBinary = process.env.FIREFOX_PATH ?? 'D:\\Program Files\\Mozilla Firefox\\firefox.exe';
-  // Use geckodriver from PATH (added via environment variable)
-  process.env.MOZ_REMOTE_ALLOW_SYSTEM_ACCESS = '1';
-  const options = new firefox.Options().setBinary(firefoxBinary);
+  
+  // Use Selenium Standalone Server (no geckodriver PATH dependency)
+  await driver.manage().setChromeOptions({ args: ['--disable-gpu'] });
   if (!headed) options.addArguments('-headless');
   const driver = await new Builder()
     .forBrowser('firefox')

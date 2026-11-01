@@ -5,11 +5,17 @@
 An advanced, cross-browser extension designed for language learners on **YouTube** and **ZDF**. Powered by client-side neural machine translation via Hugging Face Transformers.js and ONNX Runtime Web.
 
 <p align="center">
-  <a href="https://addons.mozilla.org/en-US/firefox/addon/2subs2learn/" title="Get 2Subs2Learn for Firefox">
-    <img src="https://img.shields.io/badge/GET%20IT%20ON-FIREFOX%20ADD--ONS-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white" alt="Get 2Subs2Learn on Firefox Add-ons" />
+  <a href="https://chromewebstore.google.com/detail/egkapkomakndamdhmlgknamdhmfnmkbf?utm_source=item-share-cb" target="_blank" title="Get 2Subs2Learn for Chrome">
+    <img src="https://img.shields.io/badge/GET%20IT%20ON-CHROME%20WEB%20STORE-F9AB00?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Get 2Subs2Learn on Chrome Web Store" />
   </a>
   &nbsp;&nbsp;
-  <img src="https://img.shields.io/badge/CHROME_WEB_STORE-APPROVAL_PENDING-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Chrome Web Store: approval pending" />
+  <a href="https://addons.mozilla.org/en-US/firefox/addon/2subs2learn/" target="_blank" title="Get 2Subs2Learn for Firefox">
+    <img src="https://img.shields.io/badge/GET%20IT%20ON-FIREFOX%20ADD--ONS-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white" alt="Get 2Subs2Learn on Firefox Add-ons" />
+  </a>
+</p>
+
+<p align="center">
+  <em><strong>Note:</strong> Chrome Web Store approval is currently pending.</em>
 </p>
 
 ---
