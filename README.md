@@ -14,10 +14,6 @@ An advanced, cross-browser extension designed for language learners on **YouTube
   </a>
 </p>
 
-<p align="center">
-  <em><strong>Note:</strong> Chrome Web Store approval is currently pending.</em>
-</p>
-
 ---
 
 [![Version](https://img.shields.io/badge/version-0.0.5-blue.svg?style=flat-square)](https://github.com/alfazkhan/2Subs2Learn/releases)
